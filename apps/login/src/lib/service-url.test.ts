@@ -24,69 +24,57 @@ describe("Service URL utilities", () => {
       expect(() => getServiceConfig(mockHeaders)).toThrow("ZITADEL_API_URL is not set");
     });
 
-    test("should use x-zitadel-forward-host when present (multi-tenant)", () => {
-      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud";
+    // Track B / standalone deploy: instanceHost is derived from ZITADEL_API_URL
+    // (the instance's own domain), NOT the browser Host, and publicHost is omitted
+    // so Zitadel skips its trusted-domain check. See getServiceConfig comments.
+    test("derives instanceHost from ZITADEL_API_URL and omits publicHost", () => {
+      process.env.ZITADEL_API_URL = "https://id.institutomix.com.br";
 
       const mockHeaders = {
         get: vi.fn((key: string) => {
-          if (key === "x-zitadel-forward-host") return "customer.zitadel.cloud";
-          if (key === "host") return "customer.zitadel.cloud";
+          // Browser host differs from the instance domain; it must be ignored.
+          if (key === "x-zitadel-forward-host") return "entrar.institutomix.com.br";
+          if (key === "host") return "entrar.institutomix.com.br";
           return null;
         }),
       } as any;
 
       const result = getServiceConfig(mockHeaders);
 
-      expect(result.serviceConfig.baseUrl).toBe("https://api.zitadel.cloud");
-      expect(result.serviceConfig.instanceHost).toBe("customer.zitadel.cloud");
-      expect(result.serviceConfig.publicHost).toBe("customer.zitadel.cloud");
+      expect(result.serviceConfig.baseUrl).toBe("https://id.institutomix.com.br");
+      expect(result.serviceConfig.instanceHost).toBe("id.institutomix.com.br");
+      expect(result.serviceConfig.publicHost).toBeUndefined();
     });
 
-    test("should strip protocol from instanceHost and publicHost", () => {
-      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud";
+    test("strips protocol and any trailing path/slash from ZITADEL_API_URL", () => {
+      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud/";
 
-      const mockHeaders = {
-        get: vi.fn((key: string) => {
-          if (key === "x-zitadel-forward-host") return "https://customer.zitadel.cloud";
-          if (key === "host") return "customer.zitadel.cloud";
-          return null;
-        }),
-      } as any;
+      const mockHeaders = { get: vi.fn(() => null) } as any;
 
       const result = getServiceConfig(mockHeaders);
 
-      expect(result.serviceConfig.instanceHost).toBe("customer.zitadel.cloud");
-      expect(result.serviceConfig.publicHost).toBe("customer.zitadel.cloud");
+      expect(result.serviceConfig.instanceHost).toBe("api.zitadel.cloud");
     });
 
-    test("should throw when host header is missing", () => {
+    test("does not depend on the request Host header", () => {
       process.env.ZITADEL_API_URL = "https://api.zitadel.cloud";
 
-      const mockHeaders = {
-        get: vi.fn((key: string) => {
-          if (key === "x-zitadel-forward-host") return null;
-          if (key === "host") return null;
-          return null;
-        }),
-      } as any;
-
-      expect(() => getServiceConfig(mockHeaders)).toThrow("No host found in headers");
-    });
-
-    test("should handle host with port number", () => {
-      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud";
-
-      const mockHeaders = {
-        get: vi.fn((key: string) => {
-          if (key === "x-zitadel-forward-host") return "customer.zitadel.cloud:443";
-          if (key === "host") return "customer.zitadel.cloud:443";
-          return null;
-        }),
-      } as any;
+      // No host headers at all — must still resolve the instance from the API URL.
+      const mockHeaders = { get: vi.fn(() => null) } as any;
 
       const result = getServiceConfig(mockHeaders);
 
-      expect(result.serviceConfig.publicHost).toBe("customer.zitadel.cloud:443");
+      expect(result.serviceConfig.instanceHost).toBe("api.zitadel.cloud");
+    });
+
+    test("keeps a port present in ZITADEL_API_URL", () => {
+      process.env.ZITADEL_API_URL = "http://localhost:8080";
+
+      const mockHeaders = { get: vi.fn(() => null) } as any;
+
+      const result = getServiceConfig(mockHeaders);
+
+      expect(result.serviceConfig.instanceHost).toBe("localhost:8080");
     });
   });
 

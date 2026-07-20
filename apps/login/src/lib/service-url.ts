@@ -1,6 +1,6 @@
 import { ReadonlyHeaders } from "next/dist/server/web/spec-extension/adapters/headers";
 import { NextRequest } from "next/server";
-import { getInstanceHost, getPublicHost } from "./server/host";
+import { getPublicHost } from "./server/host";
 import { ServiceConfig } from "./zitadel";
 
 /**
@@ -25,15 +25,25 @@ export function getServiceConfig(headers: ReadonlyHeaders): { serviceConfig: Ser
     throw new Error("ZITADEL_API_URL is not set");
   }
 
-  // use forwarded host from proxy - headers are forwarded to the APIs.
-  const instanceHost = getInstanceHost(headers);
-  const publicHost = getPublicHost(headers);
+  // Track B / standalone deploy: this login UI runs on its own domain
+  // (e.g. entrar.institutomix.com.br) that is NOT a Zitadel instance domain.
+  // In a normal Zitadel deployment the login app sits behind Zitadel's proxy,
+  // which sets x-zitadel-instance-host to the instance's domain. Here nothing
+  // does, so getInstanceHost() falls back to the browser Host (entrar), and
+  // Zitadel's instance resolution (keyed on instance domains) 404s.
+  //
+  // The instance is always the one at ZITADEL_API_URL, so derive the instance
+  // host from it. publicHost is intentionally omitted: with instanceHost equal
+  // to the instance's own domain, Zitadel skips its public-domain trust check,
+  // so this UI's domain does not need to be registered as a trusted domain.
+  // Browser-facing URLs still use getPublicHost(headers) directly, so redirects
+  // keep pointing at this UI's real host.
+  const instanceHost = stripProtocol(process.env.ZITADEL_API_URL).replace(/\/.*$/, "");
 
   return {
     serviceConfig: {
       baseUrl: process.env.ZITADEL_API_URL,
-      ...(instanceHost && { instanceHost: stripProtocol(instanceHost) }),
-      ...(publicHost && { publicHost: stripProtocol(publicHost) }),
+      ...(instanceHost && { instanceHost }),
     },
   };
 }
