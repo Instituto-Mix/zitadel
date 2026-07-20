@@ -5,8 +5,8 @@
 # directly by Dokploy — or locally with Apple's `container` CLI:
 #
 #   Build context MUST be the repo root (it needs proto/, packages/, the pnpm workspace):
-#     container build -f apps/login/Dockerfile.dokploy -t im-login:latest .
-#     # or on a Docker host / Dokploy:  docker build -f apps/login/Dockerfile.dokploy -t im-login:latest .
+#     container build -f Dockerfile.dokploy -t im-login:latest .
+#     # or on a Docker host / Dokploy:  docker build -f Dockerfile.dokploy -t im-login:latest .
 #
 #   Run:
 #     container run --rm -p 3000:3000 --env-file apps/login/.env.dokploy.example im-login:latest

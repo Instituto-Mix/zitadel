@@ -35,13 +35,13 @@ work even if the resolver is down.
 
 ```sh
 # from the repo root
-container build -f apps/login/Dockerfile.dokploy -t im-login:latest .
+container build -f Dockerfile.dokploy -t im-login:latest .
 ```
 
 ### Docker (Dokploy build host)
 
 ```sh
-docker build -f apps/login/Dockerfile.dokploy -t im-login:latest .
+docker build -f Dockerfile.dokploy -t im-login:latest .
 ```
 
 ---
@@ -62,7 +62,7 @@ them as runtime env has no effect.
 ```sh
 container build \
   --build-arg SERVER_ACTION_ALLOWED_ORIGINS=login.example.com \
-  -f apps/login/Dockerfile.dokploy -t im-login:latest .
+  -f Dockerfile.dokploy -t im-login:latest .
 ```
 
 Override the base path the same way:
@@ -70,7 +70,7 @@ Override the base path the same way:
 ```sh
 container build \
   --build-arg NEXT_PUBLIC_BASE_PATH=/ui/v2/login \
-  -f apps/login/Dockerfile.dokploy -t im-login:latest .
+  -f Dockerfile.dokploy -t im-login:latest .
 ```
 
 **On Dokploy:** put these in the service's **Build Args** field — *not* Environment
@@ -112,7 +112,7 @@ The server listens on port **3000**. Health endpoint: **`/ready`** (or
 
 ### Dokploy service settings
 
-- **Dockerfile path:** `apps/login/Dockerfile.dokploy`
+- **Dockerfile path:** `Dockerfile.dokploy`
 - **Build context / root:** repository root
 - **Build Args:** `SERVER_ACTION_ALLOWED_ORIGINS` (your domain), optional `NEXT_PUBLIC_BASE_PATH`
 - **Environment:** the runtime vars above
