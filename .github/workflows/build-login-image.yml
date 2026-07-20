@@ -1,0 +1,73 @@
+name: build-login-image
+
+# Build the forked Login v2 container image on GitHub's runners (not the Dokploy
+# server) and push it to GHCR. Dokploy then just pulls the finished image, so no
+# pnpm install / next build ever runs on the deploy host.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/login/**"
+      - "packages/zitadel-client/**"
+      - "packages/zitadel-proto/**"
+      - "proto/**"
+      - "Dockerfile.dokploy"
+      - ".dockerignore"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - ".github/workflows/build-login-image.yml"
+  workflow_dispatch:
+    inputs:
+      server_action_allowed_origins:
+        description: "Public domain baked into the build (SERVER_ACTION_ALLOWED_ORIGINS)"
+        required: false
+        default: "entrar.institutomix.com.br"
+
+env:
+  IMAGE: ghcr.io/instituto-mix/im-login
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.dokploy
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SERVER_ACTION_ALLOWED_ORIGINS=${{ github.event.inputs.server_action_allowed_origins || 'entrar.institutomix.com.br' }}
+            NEXT_PUBLIC_BASE_PATH=
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
