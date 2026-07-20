@@ -91,8 +91,11 @@ ENV HOSTNAME="::" \
 
 EXPOSE 3000
 
-# Base path is empty => health endpoint is at /ready.
+# Liveness probe: /healthy always returns 200 once the server is up (no Zitadel
+# dependency). Use it for orchestrator health/routing so a Zitadel wiring gap
+# doesn't pull the container out of rotation. /ready (which checks the Zitadel
+# API) is for readiness dashboards, not for gating traffic.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD ["node", "/app/healthcheck.mjs", "/ready"]
+    CMD ["node", "/app/healthcheck.mjs", "/healthy"]
 
 ENTRYPOINT ["/app/entrypoint.sh", "node", "apps/login/server.js"]
