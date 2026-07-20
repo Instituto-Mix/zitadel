@@ -61,6 +61,14 @@ RUN : > apps/login/.env \
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
+# ca-certificates: the runtime uses `--use-openssl-ca` + SSL_CERT_FILE=
+# /etc/ssl/certs/ca-certificates.crt to verify TLS to the Zitadel API. The slim
+# base ships without that bundle, so without this the app trusts no CA and even
+# a valid public (Let's Encrypt) cert fails with UNABLE_TO_GET_ISSUER_CERT_LOCALLY.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 1001 nodejs \
     && useradd --system --uid 1001 --gid nodejs nextjs \
     # /.env-file/.env is optionally mounted; entrypoint.sh sources it if present.
