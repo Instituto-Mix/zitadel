@@ -1,19 +1,60 @@
-# Build context hygiene for the login app image (apps/login/Dockerfile.dokploy).
-# Keep source (apps, packages, proto) — exclude installed/generated artifacts.
+# Build-context hygiene for the login image (Dockerfile.dokploy).
+#
+# The image only builds the login app (apps/login) + its workspace deps
+# (packages/zitadel-client, packages/zitadel-proto) from proto/. But
+# `pnpm install --frozen-lockfile` must still SEE every workspace package.json
+# named in pnpm-workspace.yaml (console, tests/*, apps/*, packages/*,
+# deploy/compose) to validate the lockfile. So for the workspaces we do NOT
+# build, we keep only their package.json and drop the (heavy) source.
+
+# --- installed / generated artifacts ---
 **/node_modules
 **/.next
 **/.open-next
 **/.turbo
 **/dist
-.git
-**/*.log
 **/coverage
-**/.env
-**/.env.*
-!**/.env.theme.example
-# generated proto output is rebuilt inside the image
+**/*.log
+.git
+
+# --- generated proto output (rebuilt in-image) ---
 packages/zitadel-proto/zitadel
 packages/zitadel-proto/google
 packages/zitadel-proto/validate
 packages/zitadel-proto/protoc-gen-openapiv2
 packages/zitadel-client/dist
+
+# --- Go backend & non-JS tooling (not part of the login build) ---
+internal
+cmd
+pkg
+backend
+statik
+openapi
+main.go
+go.mod
+go.sum
+buf.work.yaml
+.golangci.yaml
+.github
+.devcontainer
+
+# --- workspace packages we don't build: keep only package.json ---
+console/*
+!console/package.json
+apps/docs/*
+!apps/docs/package.json
+tests/*
+!tests/functional-ui
+tests/functional-ui/*
+!tests/functional-ui/package.json
+deploy/*
+!deploy/compose
+deploy/compose/*
+!deploy/compose/package.json
+benchmark
+
+# --- env files (never bake developer env into the image) ---
+**/.env
+**/.env.*
+!**/.env.theme.example

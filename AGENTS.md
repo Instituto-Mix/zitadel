@@ -3,6 +3,34 @@
 ## Mission & Context
 ZITADEL is an open-source Identity Management System (IAM) written in Go and Angular/React. It provides secure login, multi-tenancy, and audit trails.
 
+## Fork Notice — Instituto-Mix (login-only)
+
+This is a **private fork** of `zitadel/zitadel`. Its **only purpose** is the
+self-hosted **Login v2 app (`apps/login`)**, extended with the legacy-identifier
+login feature (Track B — tax number / secondary legacy username → canonical
+Zitadel loginName). See `apps/login/README.dokploy.md`.
+
+**When syncing / updating code from the upstream repo, only care about the login
+app and its direct build dependencies. Ignore everything else.**
+
+- **Relevant to this fork** (review, merge, resolve conflicts here):
+  - `apps/login/**`
+  - `packages/zitadel-client/**`, `packages/zitadel-proto/**`
+  - `proto/**` (source for the generated client)
+  - Root workspace files: `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`
+- **Ignore when syncing** (not built or deployed by this fork — do not spend
+  effort reviewing/porting upstream changes here):
+  - Go backend: `internal/`, `cmd/`, `pkg/`, `backend/`, `main.go`, `go.mod`, `go.sum`
+  - `console/` (Angular), `apps/docs/`, `tests/`, `benchmark/`, `deploy/`
+  - Their source is also excluded from the Docker build context (see `.dockerignore`).
+- **Fork-only files (not upstream — never overwrite from upstream):**
+  `Dockerfile.dokploy` (repo root), `.dockerignore`, `apps/login/.env.dokploy.example`,
+  `apps/login/README.dokploy.md`, and the Track B code
+  (`apps/login/src/lib/server/legacy-identifier.ts` + its use in `loginname.ts`).
+
+Deploy target is a **container on Dokploy** (not Cloudflare Workers — Next.js 16's
+Node-only `proxy.ts` middleware is incompatible with the Workers/OpenNext adapter).
+
 ## Read Order
 1. Read this file first.
 2. Read the nearest scoped `AGENTS.md` for the area you edit.
