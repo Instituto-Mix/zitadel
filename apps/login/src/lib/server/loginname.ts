@@ -26,6 +26,7 @@ import {
 } from "../zitadel";
 import { createSessionAndUpdateCookie } from "./cookie";
 import { getPublicHost } from "./host";
+import { resolveLegacyIdentifier, substituteLoginName } from "./legacy-identifier";
 import { trySendVerification } from "./verify";
 
 const logger = createLogger("loginname");
@@ -53,9 +54,15 @@ export async function sendLoginname(command: SendLoginnameCommand) {
     return { error: t("errors.couldNotGetLoginSettings") };
   }
 
+  // Legacy-identifier login (Track B): translate a typed tax number or secondary
+  // legacy username into the canonical Zitadel loginName before searching. On a
+  // miss/error this returns the typed value unchanged (fail-open).
+  const resolved = await resolveLegacyIdentifier(command.loginName);
+  const effectiveLoginName = substituteLoginName(command.loginName, resolved);
+
   let searchUsersRequest: SearchUsersCommand = {
     serviceConfig,
-    searchValue: command.loginName,
+    searchValue: effectiveLoginName,
     organizationId: command.organization,
     loginSettings: loginSettingsByContext,
     suffix: command.suffix,

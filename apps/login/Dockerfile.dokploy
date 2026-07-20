@@ -1,0 +1,90 @@
+# Self-contained image for the forked Zitadel Login v2 (Track B: legacy-identifier login).
+#
+# Unlike the upstream apps/login/Dockerfile (which only COPYs a pre-built
+# .next/standalone), this builds everything from source so it can be built
+# directly by Dokploy — or locally with Apple's `container` CLI:
+#
+#   Build context MUST be the repo root (it needs proto/, packages/, the pnpm workspace):
+#     container build -f apps/login/Dockerfile.dokploy -t im-login:latest .
+#     # or on a Docker host / Dokploy:  docker build -f apps/login/Dockerfile.dokploy -t im-login:latest .
+#
+#   Run:
+#     container run --rm -p 3000:3000 --env-file apps/login/.env.dokploy.example im-login:latest
+#
+# NOTE: NEXT_PUBLIC_BASE_PATH and SERVER_ACTION_ALLOWED_ORIGINS are baked at
+# BUILD time (Next.js standalone serializes config + public env), so they are
+# build ARGs — not runtime env. Everything else (ZITADEL_API_URL, tokens,
+# AUTH_BACKEND_*) is read at runtime.
+
+# ---------- builder ----------
+FROM node:24-bookworm-slim AS builder
+WORKDIR /app
+
+# ca-certificates: buf (a Go binary) fetches proto deps from buf.build over TLS,
+# and the slim base image ships without a CA bundle ("unknown authority").
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build-time configuration (baked into the standalone output).
+# Default domain for Next.js Server Action origin allow-listing.
+ARG SERVER_ACTION_ALLOWED_ORIGINS="entrar.institutomix.com.br"
+# Empty base path => app is served at the domain root (https://entrar.institutomix.com.br/).
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV SERVER_ACTION_ALLOWED_ORIGINS=${SERVER_ACTION_ALLOWED_ORIGINS} \
+    NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH} \
+    NEXT_TELEMETRY_DISABLED=1 \
+    # Prefer IPv4 DNS during install/build: some container runtimes (e.g. Apple's
+    # `container` VM) have no IPv6 egress, so registry hosts that resolve to IPv6
+    # first would otherwise fail to connect.
+    NODE_OPTIONS="--dns-result-order=ipv4first"
+
+RUN corepack enable
+
+# Copy the whole monorepo context (see .dockerignore for what's excluded).
+COPY . .
+
+# Install only the login app and its workspace dependencies.
+RUN pnpm install --frozen-lockfile --filter @zitadel/login...
+
+# Generate protobuf TS, build the client SDK, then build the login app.
+RUN pnpm --filter @zitadel/proto generate \
+    && pnpm --filter @zitadel/client build
+
+# Do not bake any developer .env (e.g. localhost ZITADEL_API_URL) into the image.
+# An empty file must exist so the app's build script (which removes it from the
+# standalone output) succeeds.
+RUN : > apps/login/.env \
+    && pnpm --filter @zitadel/login build
+
+# ---------- runner ----------
+FROM node:24-bookworm-slim AS runner
+WORKDIR /app
+
+RUN groupadd --system --gid 1001 nodejs \
+    && useradd --system --uid 1001 --gid nodejs nextjs \
+    # /.env-file/.env is optionally mounted; entrypoint.sh sources it if present.
+    && mkdir -p /.env-file && touch /.env-file/.env && chown -R nextjs:nodejs /.env-file
+
+# The standalone bundle already contains entrypoint.sh, healthcheck.mjs,
+# load-ssl-cert-dir.cjs, server.mjs, public/ and the pruned node_modules.
+COPY --from=builder --chown=nextjs:nodejs /app/apps/login/.next/standalone ./
+
+USER nextjs
+
+ENV HOSTNAME="::" \
+    PORT="3000" \
+    NODE_ENV="production" \
+    NODE_OPTIONS="--use-openssl-ca --require /app/load-ssl-cert-dir.cjs" \
+    SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt" \
+    ZITADEL_TLS_ENABLED="false" \
+    OTEL_SERVICE_NAME="zitadel-login" \
+    OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+
+EXPOSE 3000
+
+# Base path is empty => health endpoint is at /ready.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD ["node", "/app/healthcheck.mjs", "/ready"]
+
+ENTRYPOINT ["/app/entrypoint.sh", "node", "apps/login/server.js"]

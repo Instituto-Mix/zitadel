@@ -1,0 +1,19 @@
+# Build context hygiene for the login app image (apps/login/Dockerfile.dokploy).
+# Keep source (apps, packages, proto) — exclude installed/generated artifacts.
+**/node_modules
+**/.next
+**/.open-next
+**/.turbo
+**/dist
+.git
+**/*.log
+**/coverage
+**/.env
+**/.env.*
+!**/.env.theme.example
+# generated proto output is rebuilt inside the image
+packages/zitadel-proto/zitadel
+packages/zitadel-proto/google
+packages/zitadel-proto/validate
+packages/zitadel-proto/protoc-gen-openapiv2
+packages/zitadel-client/dist
