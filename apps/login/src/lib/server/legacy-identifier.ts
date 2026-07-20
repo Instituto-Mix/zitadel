@@ -40,15 +40,16 @@ export function detectCredentialType(value: string): CredentialType {
 
 /**
  * Pure substitution: given the typed identifier and a resolver result, return
- * the loginName Login v2 should search for. A hit for an active user with a
- * login_name substitutes; a miss (null), an inactive user, or a missing
- * login_name passes the typed value through unchanged.
+ * the loginName Login v2 should search for. A hit with a login_name substitutes;
+ * a miss (null) or a missing login_name passes the typed value through unchanged.
+ * (The backend returns 403 — i.e. null here — for inactive/unresolvable, so a
+ * 200 hit is always usable.)
  */
 export function substituteLoginName(
   typedValue: string,
   resolved: ResolveResponse | null,
 ): string {
-  if (resolved && resolved.active && resolved.login_name) {
+  if (resolved && resolved.login_name) {
     return resolved.login_name;
   }
   return typedValue;
@@ -74,16 +75,27 @@ export async function resolveLegacyIdentifier(
     return null;
   }
 
+  // Emails are not a valid credential_type (the backend returns 400). Skip the
+  // resolver entirely and let the normal Zitadel flow handle an email input.
+  if (typedValue.includes("@")) {
+    return null;
+  }
+
   const credentialType = detectCredentialType(typedValue);
 
   try {
+    // AUTH_BACKEND_URL already includes the API version prefix (e.g. .../v1),
+    // so the path here is just /auth/resolve.
     const response = await fetch(
-      `${backendUrl.replace(/\/$/, "")}/v1/auth/resolve`,
+      `${backendUrl.replace(/\/$/, "")}/auth/resolve`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          // The backend guard checks this exact header (not Authorization: Bearer).
+          "x-zitadel-service-account": token,
+          // Bypass the ngrok free-tier browser interstitial for API calls.
+          "ngrok-skip-browser-warning": "1",
         },
         body: JSON.stringify({
           credential_type: credentialType,

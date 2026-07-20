@@ -40,8 +40,8 @@ describe("substituteLoginName", () => {
     expect(substituteLoginName("12345678901", null)).toBe("12345678901");
   });
 
-  it("passes through when the resolved user is inactive", () => {
-    expect(substituteLoginName("A0000", { ...hit, active: false })).toBe("A0000");
+  it("substitutes on a hit regardless of active (backend 403s for inactive)", () => {
+    expect(substituteLoginName("A0000", { ...hit, active: false })).toBe("canonical@example.com");
   });
 
   it("passes through when login_name is missing", () => {
@@ -93,15 +93,23 @@ describe("resolveLegacyIdentifier", () => {
     expect(result).toEqual(body);
     expect(fetchSpy).toHaveBeenCalledOnce();
     const [url, init] = fetchSpy.mock.calls[0];
-    // trailing slash on the base URL is normalized
-    expect(url).toBe("https://backend.example.com/v1/auth/resolve");
+    // AUTH_BACKEND_URL already includes /v1; trailing slash is normalized.
+    expect(url).toBe("https://backend.example.com/auth/resolve");
     expect(init?.headers).toMatchObject({
-      Authorization: "Bearer secret-token",
+      "x-zitadel-service-account": "secret-token",
+      "ngrok-skip-browser-warning": "1",
     });
+    expect(init?.headers).not.toHaveProperty("Authorization");
     expect(JSON.parse(init?.body as string)).toEqual({
       credential_type: "tax_id",
       value: "12345678901",
     });
+  });
+
+  it("skips the resolver for email inputs (never calls fetch)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    expect(await resolveLegacyIdentifier("eder@heisler.com.br")).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("returns null on a 403 miss", async () => {
