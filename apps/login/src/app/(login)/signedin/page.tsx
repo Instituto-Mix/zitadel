@@ -127,6 +127,20 @@ export default async function Page(props: { searchParams: Promise<any> }) {
             </Link>
           </div>
         )}
+
+        <div className="mt-8 flex w-full flex-row items-center justify-between">
+          <Link href="/accounts">
+            <Button type="button" variant={ButtonVariants.Secondary}>
+              <Translated i18nKey="title" namespace="accounts" />
+            </Button>
+          </Link>
+
+          <Link href="/logout">
+            <Button type="button" variant={ButtonVariants.Secondary}>
+              <Translated i18nKey="title" namespace="logout" />
+            </Button>
+          </Link>
+        </div>
       </div>
     </DynamicTheme>
   );
