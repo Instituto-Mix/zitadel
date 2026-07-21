@@ -1,6 +1,7 @@
 import { DynamicTheme } from "@/components/dynamic-theme";
 import { SessionsClearList } from "@/components/sessions-clear-list";
 import { Translated } from "@/components/translated";
+import Link from "next/link";
 import { getAllSessionCookieIds } from "@/lib/cookies";
 import { getServiceConfig } from "@/lib/service-url";
 import { getBrandingSettings, getDefaultOrg, listSessions, ServiceConfig } from "@/lib/zitadel";
@@ -97,6 +98,15 @@ export default async function Page(props: { searchParams: Promise<Record<string 
             postLogoutRedirectUri={postLogoutRedirectUri}
             organization={organization ?? defaultOrganization}
           />
+        </div>
+
+        <div className="mt-4 flex w-full flex-row items-center justify-center">
+          <Link
+            href={params.toString() ? `/loginname?${params}` : "/loginname"}
+            className="text-primary-light-500 hover:text-primary-light-400 dark:text-primary-dark-500 hover:dark:text-primary-dark-400"
+          >
+            <Translated i18nKey="title" namespace="loginname" />
+          </Link>
         </div>
       </div>
     </DynamicTheme>
