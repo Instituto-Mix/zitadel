@@ -55,14 +55,18 @@ export async function sendLoginname(command: SendLoginnameCommand) {
   }
 
   // Legacy-identifier login (Track B): translate a typed tax number or secondary
-  // legacy username into the canonical Zitadel loginName before searching. On a
-  // miss/error this returns the typed value unchanged (fail-open).
+  // legacy username into the canonical Zitadel loginName. Substitute it into the
+  // command itself so the whole flow uses the canonical loginName — not only the
+  // user search, but also the loginName shown on later steps (the avatar/display
+  // and the /password, /passkey, /verify redirects). Otherwise the raw typed
+  // value (e.g. the CPF) leaks into the UI. On a miss/error the typed value is
+  // left unchanged (fail-open).
   const resolved = await resolveLegacyIdentifier(command.loginName);
-  const effectiveLoginName = substituteLoginName(command.loginName, resolved);
+  command.loginName = substituteLoginName(command.loginName, resolved);
 
   let searchUsersRequest: SearchUsersCommand = {
     serviceConfig,
-    searchValue: effectiveLoginName,
+    searchValue: command.loginName,
     organizationId: command.organization,
     loginSettings: loginSettingsByContext,
     suffix: command.suffix,
