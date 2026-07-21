@@ -3,11 +3,10 @@ import { DynamicTheme } from "@/components/dynamic-theme";
 import { PasswordForm } from "@/components/password-form";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
-import { getServiceConfig, rebaseAssetUrl } from "@/lib/service-url";
+import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
-import { getBrandingSettings, getDefaultOrg, getLoginSettings, getUserByID } from "@/lib/zitadel";
+import { getBrandingSettings, getDefaultOrg, getLoginSettings } from "@/lib/zitadel";
 import { Organization } from "@zitadel/proto/zitadel/org/v2/org_pb";
-import { HumanUser } from "@zitadel/proto/zitadel/user/v2/user_pb";
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
@@ -42,17 +41,6 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     },
   });
 
-  // fetch the full user to resolve the uploaded avatar image, which is not part
-  // of the session user factor (session_pb only carries loginName/displayName)
-  let human: HumanUser | undefined;
-  const userId = sessionFactors?.factors?.user?.id;
-  if (userId) {
-    const userResponse = await getUserByID({ serviceConfig, userId });
-    if (userResponse.user?.type.case === "human") {
-      human = userResponse.user.type.value;
-    }
-  }
-
   const branding = await getBrandingSettings({
     serviceConfig,
     organization: organization ?? sessionFactors?.factors?.user?.organizationId ?? defaultOrganization,
@@ -76,7 +64,6 @@ export default async function Page(props: { searchParams: Promise<Record<string 
           <UserAvatar
             loginName={loginName ?? sessionFactors.factors?.user?.loginName}
             displayName={sessionFactors.factors?.user?.displayName}
-            imageUrl={rebaseAssetUrl(human?.profile?.avatarUrl, serviceConfig.baseUrl)}
             showDropdown
             searchParams={searchParams}
           ></UserAvatar>
