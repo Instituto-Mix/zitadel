@@ -71,3 +71,10 @@ jobs:
             NEXT_PUBLIC_BASE_PATH=
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Trigger Dokploy to pull the new image and redeploy the login app.
+      # URL stored as a secret (it authorizes deployments). -f fails the job on non-2xx.
+      - name: Trigger Dokploy deploy
+        run: curl -fsS -X POST "$DOKPLOY_WEBHOOK" -o /dev/null -w "dokploy deploy triggered: %{http_code}\n"
+        env:
+          DOKPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
