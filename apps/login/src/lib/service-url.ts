@@ -38,7 +38,15 @@ export function getServiceConfig(headers: ReadonlyHeaders): { serviceConfig: Ser
   // so this UI's domain does not need to be registered as a trusted domain.
   // Browser-facing URLs still use getPublicHost(headers) directly, so redirects
   // keep pointing at this UI's real host.
-  const instanceHost = stripProtocol(process.env.ZITADEL_API_URL).replace(/\/.*$/, "");
+  //
+  // ZITADEL_INSTANCE_HOST overrides the instance host sent to the API. Set it to
+  // a shared PARENT domain (e.g. institutomix.com.br) when this UI runs on a
+  // sibling subdomain of the Zitadel instance: Zitadel derives the WebAuthn
+  // RP ID from this value, and the RP ID must be equal to or a parent of the
+  // login origin for passkey/U2F to work. The parent must be registered as an
+  // instance domain in Zitadel (logical only — no DNS required).
+  const instanceHostSource = process.env.ZITADEL_INSTANCE_HOST || process.env.ZITADEL_API_URL;
+  const instanceHost = stripProtocol(instanceHostSource).replace(/\/.*$/, "");
 
   return {
     serviceConfig: {

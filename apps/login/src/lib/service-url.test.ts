@@ -67,6 +67,18 @@ describe("Service URL utilities", () => {
       expect(result.serviceConfig.instanceHost).toBe("api.zitadel.cloud");
     });
 
+    test("ZITADEL_INSTANCE_HOST overrides the instance host (parent domain for WebAuthn RP ID)", () => {
+      process.env.ZITADEL_API_URL = "https://id.institutomix.com.br";
+      process.env.ZITADEL_INSTANCE_HOST = "institutomix.com.br";
+
+      const mockHeaders = { get: vi.fn(() => null) } as any;
+
+      const result = getServiceConfig(mockHeaders);
+
+      expect(result.serviceConfig.baseUrl).toBe("https://id.institutomix.com.br");
+      expect(result.serviceConfig.instanceHost).toBe("institutomix.com.br");
+    });
+
     test("keeps a port present in ZITADEL_API_URL", () => {
       process.env.ZITADEL_API_URL = "http://localhost:8080";
 
