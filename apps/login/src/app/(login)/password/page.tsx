@@ -3,7 +3,7 @@ import { DynamicTheme } from "@/components/dynamic-theme";
 import { PasswordForm } from "@/components/password-form";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
-import { getServiceConfig } from "@/lib/service-url";
+import { getServiceConfig, rebaseAssetUrl } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, getDefaultOrg, getLoginSettings, getUserByID } from "@/lib/zitadel";
 import { Organization } from "@zitadel/proto/zitadel/org/v2/org_pb";
@@ -76,7 +76,7 @@ export default async function Page(props: { searchParams: Promise<Record<string 
           <UserAvatar
             loginName={loginName ?? sessionFactors.factors?.user?.loginName}
             displayName={sessionFactors.factors?.user?.displayName}
-            imageUrl={human?.profile?.avatarUrl}
+            imageUrl={rebaseAssetUrl(human?.profile?.avatarUrl, serviceConfig.baseUrl)}
             showDropdown
             searchParams={searchParams}
           ></UserAvatar>

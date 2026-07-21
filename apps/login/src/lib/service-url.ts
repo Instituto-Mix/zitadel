@@ -56,6 +56,32 @@ export function getServiceConfig(headers: ReadonlyHeaders): { serviceConfig: Ser
   };
 }
 
+/**
+ * Rewrites an absolute asset URL returned by the Zitadel API (e.g. a user's
+ * avatarUrl) so its host points at the instance that actually serves assets.
+ *
+ * Zitadel builds avatarUrl from the instance's external domain, which is the
+ * value we send as instanceHost. When ZITADEL_INSTANCE_HOST is set to a shared
+ * PARENT domain (for WebAuthn RP ID across sibling subdomains), that host does
+ * not serve assets and the image 404s. The assets live at ZITADEL_API_URL
+ * (serviceConfig.baseUrl), so force the host/protocol to that origin while
+ * keeping the original path and query. Relative URLs are resolved against it.
+ */
+export function rebaseAssetUrl(assetUrl: string | undefined, baseUrl: string): string | undefined {
+  if (!assetUrl) {
+    return assetUrl;
+  }
+  try {
+    const src = new URL(assetUrl, baseUrl);
+    const base = new URL(baseUrl);
+    src.protocol = base.protocol;
+    src.host = base.host;
+    return src.toString();
+  } catch {
+    return assetUrl;
+  }
+}
+
 export function constructUrl(request: NextRequest, path: string) {
   const protocol = request.nextUrl.protocol;
 
