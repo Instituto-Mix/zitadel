@@ -457,5 +457,10 @@
     "failedLoading": "Ошибка загрузки данных. Попробуйте ещё раз.",
     "tryagain": "Попробовать снова",
     "couldNotContinueSession": "Не удалось продолжить сеанс - отсутствует информация о пользователе"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

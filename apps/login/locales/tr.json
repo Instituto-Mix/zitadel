@@ -457,5 +457,10 @@
     "failedLoading": "Veri yüklenemedi. Lütfen tekrar deneyin.",
     "tryagain": "Tekrar Dene",
     "couldNotContinueSession": "Oturuma devam edilemedi - kullanıcı bilgileri eksik"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

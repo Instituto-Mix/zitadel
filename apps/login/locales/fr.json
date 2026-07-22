@@ -457,5 +457,10 @@
     "failedLoading": "Échec du chargement des données. Veuillez réessayer.",
     "tryagain": "Réessayer",
     "couldNotContinueSession": "Impossible de continuer la session - informations utilisateur manquantes"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

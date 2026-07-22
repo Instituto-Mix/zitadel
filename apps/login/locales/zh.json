@@ -457,5 +457,10 @@
     "failedLoading": "加载数据失败，请再试一次。",
     "tryagain": "重试",
     "couldNotContinueSession": "无法继续会话 - 缺少用户信息"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

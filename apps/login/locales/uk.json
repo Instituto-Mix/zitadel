@@ -457,5 +457,10 @@
     "failedLoading": "Не вдалося завантажити дані. Будь ласка, спробуйте ще раз.",
     "tryagain": "Спробувати ще раз",
     "couldNotContinueSession": "Не вдалося продовжити сеанс - відсутня інформація про користувача"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

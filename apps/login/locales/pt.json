@@ -457,5 +457,10 @@
     "failedLoading": "Falha ao carregar dados. Por favor, tente novamente.",
     "tryagain": "Tentar Novamente",
     "couldNotContinueSession": "Não foi possível continuar a sessão — informações do usuário ausentes"
+  },
+  "apps": {
+    "title": "Aplicativos",
+    "description": "Estes são os aplicativos que você pode acessar.",
+    "noResults": "Nenhum aplicativo disponível para sua conta."
   }
 }

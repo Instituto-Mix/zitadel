@@ -457,5 +457,10 @@
     "failedLoading": "Gegevens laden mislukt. Probeer het opnieuw.",
     "tryagain": "Opnieuw proberen",
     "couldNotContinueSession": "Kon de sessie niet voortzetten - ontbrekende gebruikersinformatie"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

@@ -135,6 +135,12 @@ export default async function Page(props: { searchParams: Promise<any> }) {
             </Button>
           </Link>
 
+          <Link href="/apps">
+            <Button type="button" variant={ButtonVariants.Secondary}>
+              <Translated i18nKey="title" namespace="apps" />
+            </Button>
+          </Link>
+
           <Link href="/logout">
             <Button type="button" variant={ButtonVariants.Secondary}>
               <Translated i18nKey="title" namespace="logout" />

@@ -457,5 +457,10 @@
       "multipleUsersFound": "複数のユーザーが見つかりました",
       "userNotFound": "ユーザーがシステムに見つかりません"
     }
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

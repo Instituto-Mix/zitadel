@@ -457,5 +457,10 @@
     "failedLoading": "فشل تحميل البيانات. يرجى المحاولة مرة أخرى.",
     "tryagain": "حاول مرة أخرى",
     "couldNotContinueSession": "تعذر المتابعة مع الجلسة - معلومات المستخدم مفقودة"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

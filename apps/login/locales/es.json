@@ -457,5 +457,10 @@
     "failedLoading": "No se pudieron cargar los datos. Por favor, inténtalo de nuevo.",
     "tryagain": "Intentar de nuevo",
     "couldNotContinueSession": "No se pudo continuar con la sesión - falta información del usuario"
+  },
+  "apps": {
+    "title": "Aplicaciones",
+    "description": "Estas son las aplicaciones a las que tienes acceso.",
+    "noResults": "No hay aplicaciones disponibles para tu cuenta."
   }
 }

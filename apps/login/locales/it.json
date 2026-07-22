@@ -457,5 +457,10 @@
     "failedLoading": "Impossibile caricare i dati. Riprova.",
     "tryagain": "Riprova",
     "couldNotContinueSession": "Impossibile continuare con la sessione - informazioni utente mancanti"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

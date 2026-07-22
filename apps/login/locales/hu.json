@@ -457,5 +457,10 @@
     "failedLoading": "Nem sikerült betölteni az adatokat. Kérjük, próbáld újra.",
     "tryagain": "Próbáld újra",
     "couldNotContinueSession": "Nem sikerült folytatni a munkamenetet - hiányzó felhasználói információk"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }

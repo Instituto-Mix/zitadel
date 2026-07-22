@@ -1,6 +1,8 @@
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { Client, create, Duration } from "@zitadel/client";
 import { makeReqCtx } from "@zitadel/client/v2";
+import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
+import { State as AuthorizationState } from "@zitadel/proto/zitadel/authorization/v2/authorization_pb";
 import { IdentityProviderService } from "@zitadel/proto/zitadel/idp/v2/idp_service_pb";
 import { OrganizationSchema, TextQueryMethod } from "@zitadel/proto/zitadel/object/v2/object_pb";
 import { CreateCallbackRequest, OIDCService } from "@zitadel/proto/zitadel/oidc/v2/oidc_service_pb";
@@ -1344,6 +1346,30 @@ export async function registerPasskey({
  * @param userId the id of the user where the email should be set
  * @returns the list of authentication method types
  */
+/**
+ * List the user's ACTIVE project authorizations (user grants) across all orgs.
+ * Powers the /apps launcher: a role held at ANY org counts as access — access
+ * is deliberately not gated to a single organization. See AUTHORIZATION.md.
+ */
+export async function listAuthorizations({
+  serviceConfig,
+  userId,
+}: WithServiceConfig<{
+  userId: string;
+}>) {
+  const authorizationService: Client<typeof AuthorizationService> = await createServiceForHost(
+    AuthorizationService,
+    serviceConfig,
+  );
+
+  return authorizationService.listAuthorizations({
+    filters: [
+      { filter: { case: "inUserIds", value: { ids: [userId] } } },
+      { filter: { case: "state", value: { state: AuthorizationState.ACTIVE } } },
+    ],
+  });
+}
+
 export async function listAuthenticationMethodTypes({
   serviceConfig,
   userId,

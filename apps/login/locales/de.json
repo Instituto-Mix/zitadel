@@ -457,5 +457,10 @@
     "failedLoading": "Daten konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
     "tryagain": "Erneut versuchen",
     "couldNotContinueSession": "Sitzung konnte nicht fortgesetzt werden - fehlende Benutzerinformationen"
+  },
+  "apps": {
+    "title": "Applications",
+    "description": "These are the applications you have access to.",
+    "noResults": "No applications available for your account."
   }
 }
