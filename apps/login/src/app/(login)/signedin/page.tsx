@@ -1,6 +1,7 @@
 import { Alert, AlertType } from "@/components/alert";
 import { Button, ButtonVariants } from "@/components/button";
 import { DynamicTheme } from "@/components/dynamic-theme";
+import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { resolveRedirectUri } from "@/lib/client";
@@ -128,25 +129,7 @@ export default async function Page(props: { searchParams: Promise<any> }) {
           </div>
         )}
 
-        <div className="mt-8 flex w-full flex-row items-center justify-between">
-          <Link href="/accounts">
-            <Button type="button" variant={ButtonVariants.Secondary}>
-              <Translated i18nKey="title" namespace="accounts" />
-            </Button>
-          </Link>
-
-          <Link href="/apps">
-            <Button type="button" variant={ButtonVariants.Secondary}>
-              <Translated i18nKey="title" namespace="apps" />
-            </Button>
-          </Link>
-
-          <Link href="/logout">
-            <Button type="button" variant={ButtonVariants.Secondary}>
-              <Translated i18nKey="title" namespace="logout" />
-            </Button>
-          </Link>
-        </div>
+        <NavLinks />
       </div>
     </DynamicTheme>
   );

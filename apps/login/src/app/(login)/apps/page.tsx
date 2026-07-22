@@ -1,4 +1,5 @@
 import { DynamicTheme } from "@/components/dynamic-theme";
+import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { groupAppsByProject, parseAppsCatalog } from "@/lib/apps-catalog";
@@ -101,6 +102,8 @@ export default async function Page(props: { searchParams: Promise<Record<string,
             </div>
           </div>
         ))}
+
+        <NavLinks current="apps" />
       </div>
     </DynamicTheme>
   );
