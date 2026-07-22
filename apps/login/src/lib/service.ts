@@ -1,4 +1,5 @@
 import { createClientFor } from "@zitadel/client";
+import { AppService } from "@zitadel/proto/zitadel/app/v2beta/app_service_pb";
 import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
 import { IdentityProviderService } from "@zitadel/proto/zitadel/idp/v2/idp_service_pb";
 import { OIDCService } from "@zitadel/proto/zitadel/oidc/v2/oidc_service_pb";
@@ -12,6 +13,7 @@ import { hasLoginClientKey, hasServiceUserToken, hasSystemUserCredentials } from
 import { createServerTransport, ServiceConfig } from "./zitadel";
 
 type ServiceClass =
+  | typeof AppService
   | typeof AuthorizationService
   | typeof IdentityProviderService
   | typeof UserService

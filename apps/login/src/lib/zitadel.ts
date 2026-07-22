@@ -1,6 +1,7 @@
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { Client, create, Duration } from "@zitadel/client";
 import { makeReqCtx } from "@zitadel/client/v2";
+import { AppService } from "@zitadel/proto/zitadel/app/v2beta/app_service_pb";
 import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
 import { State as AuthorizationState } from "@zitadel/proto/zitadel/authorization/v2/authorization_pb";
 import { IdentityProviderService } from "@zitadel/proto/zitadel/idp/v2/idp_service_pb";
@@ -1368,6 +1369,22 @@ export async function listAuthorizations({
       { filter: { case: "state", value: { state: AuthorizationState.ACTIVE } } },
     ],
   });
+}
+
+/**
+ * List a project's registered applications (app v2beta). Powers /apps launcher
+ * discovery: each granted project's apps are listed and their launch URLs
+ * derived from the app config (see lib/apps-discovery.ts).
+ */
+export async function listApplications({
+  serviceConfig,
+  projectId,
+}: WithServiceConfig<{
+  projectId: string;
+}>) {
+  const appService: Client<typeof AppService> = await createServiceForHost(AppService, serviceConfig);
+
+  return appService.listApplications({ projectId });
 }
 
 export async function listAuthenticationMethodTypes({

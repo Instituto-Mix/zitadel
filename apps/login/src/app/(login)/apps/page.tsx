@@ -2,10 +2,10 @@ import { DynamicTheme } from "@/components/dynamic-theme";
 import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
-import { groupAppsByProject, parseAppsCatalog } from "@/lib/apps-catalog";
+import { DiscoverableApp, toDiscoveredApps } from "@/lib/apps-discovery";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
-import { getBrandingSettings, listAuthorizations } from "@/lib/zitadel";
+import { getBrandingSettings, listApplications, listAuthorizations } from "@/lib/zitadel";
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
@@ -18,11 +18,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * App launcher (fork feature): lists the applications the signed-in user has
- * access to, grouped by Zitadel project. Access = an ACTIVE authorization
- * (user grant) on the app's project, held at ANY organization. Presentation
- * data (names, launch URLs) comes from the APPS_CATALOG env. See
- * AUTHORIZATION.md for the model.
+ * App launcher (fork feature): everything is discovered from Zitadel — the
+ * user's ACTIVE authorizations (a role at ANY org counts) yield the granted
+ * projects; each project's registered applications are listed and their
+ * launch URLs derived from the app's redirect URIs. No static configuration.
+ * See AUTHORIZATION.md and lib/apps-discovery.ts.
  */
 export default async function Page(props: { searchParams: Promise<Record<string, string | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -44,21 +44,48 @@ export default async function Page(props: { searchParams: Promise<Record<string,
 
   const branding = await getBrandingSettings({ serviceConfig, organization });
 
-  const catalog = parseAppsCatalog(process.env.APPS_CATALOG);
-
-  let granted: { projectId: string; projectName: string; roles: string[] }[] = [];
+  let groups: { projectId: string; projectName: string; apps: { id: string; name: string; url: string }[] }[] = [];
   try {
     const response = await listAuthorizations({ serviceConfig, userId });
-    granted = (response?.authorizations ?? []).map((a) => ({
-      projectId: a.project?.id ?? "",
-      projectName: a.project?.name ?? "",
-      roles: (a.roles ?? []).map((r) => r.key),
-    }));
+
+    // de-duplicate projects (a user may hold grants on the same project via
+    // multiple orgs — org-granted projects count the same as the home org)
+    const projects = new Map<string, string>();
+    for (const authorization of response?.authorizations ?? []) {
+      if (authorization.project?.id) {
+        projects.set(authorization.project.id, authorization.project.name ?? "");
+      }
+    }
+
+    groups = (
+      await Promise.all(
+        Array.from(projects.entries()).map(async ([projectId, projectName]) => {
+          const appsResponse = await listApplications({ serviceConfig, projectId }).catch((error) => {
+            console.error("Failed to list applications for project", { projectId, error });
+            return undefined;
+          });
+
+          const discoverable: DiscoverableApp[] = (appsResponse?.applications ?? []).map((app) => ({
+            id: app.id,
+            name: app.name,
+            kind:
+              app.config?.case === "oidcConfig"
+                ? "oidc"
+                : app.config?.case === "samlConfig"
+                  ? "saml"
+                  : app.config?.case === "apiConfig"
+                    ? "api"
+                    : "unknown",
+            redirectUris: app.config?.case === "oidcConfig" ? (app.config.value.redirectUris ?? []) : [],
+          }));
+
+          return { projectId, projectName, apps: toDiscoveredApps(discoverable) };
+        }),
+      )
+    ).filter((group) => group.apps.length > 0);
   } catch (error) {
     console.error("Failed to list authorizations for app launcher", error);
   }
-
-  const groups = groupAppsByProject(catalog, granted);
 
   return (
     <DynamicTheme branding={branding}>
@@ -91,12 +118,12 @@ export default async function Page(props: { searchParams: Promise<Record<string,
             <div className="flex flex-col space-y-2">
               {group.apps.map((app) => (
                 <Link
-                  key={`${group.projectId}:${app.url}`}
+                  key={app.id}
                   href={app.url}
                   className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-col rounded-md border px-4 py-3 transition-colors"
                 >
                   <span className="font-medium">{app.name}</span>
-                  {app.description && <span className="text-sm opacity-70">{app.description}</span>}
+                  <span className="text-sm opacity-70">{app.url}</span>
                 </Link>
               ))}
             </div>
