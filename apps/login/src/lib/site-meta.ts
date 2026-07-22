@@ -87,15 +87,31 @@ export async function fetchSiteMeta(url: string): Promise<SiteMeta> {
 
   let meta = EMPTY;
   try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(3000),
-      headers: { accept: "text/html" },
-      redirect: "follow",
-    });
-    if (response.ok && (response.headers.get("content-type") ?? "").includes("text/html")) {
+    // Follow redirects manually so every hop is re-validated by the SSRF
+    // guard — a public URL must not be able to 3xx onto an internal host.
+    let currentUrl = url;
+    let response: Response | undefined;
+    for (let hop = 0; hop < 4; hop++) {
+      response = await fetch(currentUrl, {
+        signal: AbortSignal.timeout(3000),
+        headers: { accept: "text/html" },
+        redirect: "manual",
+      });
+      if (response.status < 300 || response.status >= 400) {
+        break;
+      }
+      const location = response.headers.get("location");
+      if (!location) break;
+      currentUrl = new URL(location, currentUrl).toString();
+      if (!isFetchableUrl(currentUrl)) {
+        response = undefined; // redirect target is not allowed — give up
+        break;
+      }
+    }
+    if (response?.ok && (response.headers.get("content-type") ?? "").includes("text/html")) {
       // read at most ~64KB — title/description live in <head>
       const html = (await response.text()).slice(0, 65536);
-      meta = parseSiteMeta(html, response.url || url);
+      meta = parseSiteMeta(html, currentUrl);
     }
   } catch {
     // unreachable/slow site: fall back to EMPTY (card shows the URL)
