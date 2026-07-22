@@ -12,19 +12,29 @@ export interface SiteMeta {
   favicon: string | null;
 }
 
+/** Extract an attribute value from a tag, tolerating "double", 'single' or unquoted values. */
+function attrValue(tag: string, attr: string): string | undefined {
+  const m = tag.match(new RegExp(`${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i"));
+  return m?.[1] ?? m?.[2] ?? m?.[3];
+}
+
+/** Find the first tag of `element` carrying attr=value (quotes optional), in any attribute order. */
+function findTag(html: string, element: string, attr: string, valuePattern: string): string | undefined {
+  const re = new RegExp(`<${element}[^>]*\\b${attr}\\s*=\\s*["']?(?:${valuePattern})["']?[^>]*>`, "gi");
+  return re.exec(html)?.[0];
+}
+
 /** Parse <title>, <meta name="description"> and the favicon link out of an HTML document. */
 export function parseSiteMeta(html: string, pageUrl?: string): SiteMeta {
   const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
 
-  // tolerate attribute order: name before or after content
-  const descMatch =
-    html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ??
-    html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+  // attribute order and quoting style vary across sites — locate the tag first,
+  // then pull its content/href attribute
+  const descTag = findTag(html, "meta", "name", "description");
+  const description = descTag ? attrValue(descTag, "content") : undefined;
 
-  // <link rel="icon"|"shortcut icon"|"apple-touch-icon" href="...">, either attribute order
-  const iconMatch =
-    html.match(/<link[^>]*rel=["'](?:shortcut )?(?:icon|apple-touch-icon)["'][^>]*href=["']([^"']+)["'][^>]*>/i) ??
-    html.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?(?:icon|apple-touch-icon)["'][^>]*>/i);
+  const iconTag = findTag(html, "link", "rel", "(?:shortcut )?icon|apple-touch-icon");
+  const iconHref = iconTag ? attrValue(iconTag, "href") : undefined;
 
   const clean = (value: string | undefined) => {
     const trimmed = value?.replace(/\s+/g, " ").trim();
@@ -35,7 +45,7 @@ export function parseSiteMeta(html: string, pageUrl?: string): SiteMeta {
   if (pageUrl) {
     try {
       // resolve relative hrefs against the page; default to /favicon.ico
-      favicon = new URL(iconMatch?.[1] ?? "/favicon.ico", pageUrl).toString();
+      favicon = new URL(iconHref ?? "/favicon.ico", pageUrl).toString();
       if (!favicon.startsWith("https:")) favicon = null; // browser loads it; https only
     } catch {
       favicon = null;
@@ -44,7 +54,7 @@ export function parseSiteMeta(html: string, pageUrl?: string): SiteMeta {
 
   return {
     title: clean(titleMatch?.[1]),
-    description: clean(descMatch?.[1]),
+    description: clean(description),
     favicon,
   };
 }

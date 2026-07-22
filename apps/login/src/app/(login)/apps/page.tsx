@@ -134,8 +134,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                 <Link
                   key={app.id}
                   href={app.url}
-                  target={app.name}
-                  rel="noopener"
+                  target={`app-${app.id}`}
                   title={app.meta.description ?? undefined}
                   className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-row items-center space-x-3 rounded-md border px-4 py-3 transition-colors"
                 >

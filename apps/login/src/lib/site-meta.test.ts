@@ -65,3 +65,18 @@ describe("favicon parsing", () => {
     expect(parseSiteMeta("<title>x</title>", "https://app.example.com/deep/path").favicon).toBe("https://app.example.com/favicon.ico");
   });
 });
+
+describe("unquoted attributes (real-world)", () => {
+  it("parses the LMS head (unquoted name=description)", () => {
+    const html = `<!doctype html><html><head><title>LMS</title><meta charset=utf-8><meta name=description content="Mais que uma plataforma, um ecossistema de tecnologia e educação à sua disposição."><meta name=viewport content="user-scalable=no"></head></html>`;
+    const meta = parseSiteMeta(html, "https://www.institutomix.com.br/ead/login");
+    expect(meta.title).toBe("LMS");
+    expect(meta.description).toBe("Mais que uma plataforma, um ecossistema de tecnologia e educação à sua disposição.");
+    expect(meta.favicon).toBe("https://www.institutomix.com.br/favicon.ico");
+  });
+
+  it("parses unquoted link rel/href", () => {
+    const html = `<link rel=icon href=/fav.png>`;
+    expect(parseSiteMeta(html, "https://x.example.com/").favicon).toBe("https://x.example.com/fav.png");
+  });
+});

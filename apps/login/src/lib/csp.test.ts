@@ -18,7 +18,7 @@ describe("buildCSP", () => {
   test("adds serviceUrl to img-src and font-src", () => {
     const csp = buildCSP({ serviceUrl: "https://my-instance.zitadel.cloud" });
 
-    expect(csp).toContain("img-src 'self' https://my-instance.zitadel.cloud");
+    expect(csp).toContain("img-src 'self' https: https://my-instance.zitadel.cloud");
     expect(csp).toContain("font-src 'self' https://my-instance.zitadel.cloud");
   });
 
@@ -43,7 +43,7 @@ describe("buildCSP", () => {
       iframeOrigins: ["https://portal.mycompany.com"],
     });
 
-    expect(csp).toContain("img-src 'self' https://zitadel.mycompany.com");
+    expect(csp).toContain("img-src 'self' https: https://zitadel.mycompany.com");
     expect(csp).toContain("font-src 'self' https://zitadel.mycompany.com");
     expect(csp).toContain("frame-ancestors https://portal.mycompany.com");
     expect(csp).not.toContain("frame-ancestors 'none'");
