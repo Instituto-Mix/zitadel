@@ -3,6 +3,7 @@ import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { DiscoverableApp, toDiscoveredApps } from "@/lib/apps-discovery";
+import { fetchSiteMeta, SiteMeta } from "@/lib/site-meta";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, listApplications, listAuthorizations } from "@/lib/zitadel";
@@ -44,7 +45,11 @@ export default async function Page(props: { searchParams: Promise<Record<string,
 
   const branding = await getBrandingSettings({ serviceConfig, organization });
 
-  let groups: { projectId: string; projectName: string; apps: { id: string; name: string; url: string }[] }[] = [];
+  let groups: {
+    projectId: string;
+    projectName: string;
+    apps: { id: string; name: string; url: string; meta: SiteMeta }[];
+  }[] = [];
   try {
     const response = await listAuthorizations({ serviceConfig, userId });
 
@@ -79,7 +84,15 @@ export default async function Page(props: { searchParams: Promise<Record<string,
             redirectUris: app.config?.case === "oidcConfig" ? (app.config.value.redirectUris ?? []) : [],
           }));
 
-          return { projectId, projectName, apps: toDiscoveredApps(discoverable) };
+          // enrich each launchable app with the target site's title/description
+          const apps = await Promise.all(
+            toDiscoveredApps(discoverable).map(async (app) => ({
+              ...app,
+              meta: await fetchSiteMeta(app.url),
+            })),
+          );
+
+          return { projectId, projectName, apps };
         }),
       )
     ).filter((group) => group.apps.length > 0);
@@ -122,10 +135,11 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                   href={app.url}
                   target={app.name}
                   rel="noopener"
+                  title={app.meta.description ?? undefined}
                   className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-col rounded-md border px-4 py-3 transition-colors"
                 >
                   <span className="font-medium">{app.name}</span>
-                  <span className="text-sm opacity-70">{app.url}</span>
+                  <span className="text-sm opacity-70">{app.meta.title ?? app.url}</span>
                 </Link>
               ))}
             </div>
