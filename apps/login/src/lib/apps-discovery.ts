@@ -43,7 +43,7 @@ export function deriveLaunchUrl(app: DiscoverableApp): string | null {
       const url = new URL(uri);
       if (url.protocol !== "https:") continue; // skip http/custom-scheme (dev/native)
       if (url.hostname === "localhost" || url.hostname === "127.0.0.1") continue;
-      return url.origin;
+      return url.toString();
     } catch {
       continue;
     }

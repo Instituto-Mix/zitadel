@@ -9,14 +9,14 @@ const oidc = (redirectUris: string[], name = "App"): DiscoverableApp => ({
 });
 
 describe("deriveLaunchUrl", () => {
-  it("derives the origin from the first https redirect URI", () => {
-    expect(deriveLaunchUrl(oidc(["https://lms.example.com/api/auth/callback"]))).toBe("https://lms.example.com");
+  it("keeps the first https redirect URI in full", () => {
+    expect(deriveLaunchUrl(oidc(["https://lms.example.com/api/auth/callback"]))).toBe("https://lms.example.com/api/auth/callback");
   });
 
   it("skips localhost/dev redirect URIs and uses the first real one", () => {
     expect(
       deriveLaunchUrl(oidc(["http://localhost:3000/cb", "https://127.0.0.1/cb", "https://portal.example.com/cb"])),
-    ).toBe("https://portal.example.com");
+    ).toBe("https://portal.example.com/cb");
   });
 
   it("returns null when only dev/localhost URIs exist", () => {
@@ -28,7 +28,7 @@ describe("deriveLaunchUrl", () => {
   });
 
   it("ignores malformed URIs", () => {
-    expect(deriveLaunchUrl(oidc(["not a url", "https://ok.example.com/cb"]))).toBe("https://ok.example.com");
+    expect(deriveLaunchUrl(oidc(["not a url", "https://ok.example.com/cb"]))).toBe("https://ok.example.com/cb");
   });
 
   it("skips custom-scheme (native) redirect URIs", () => {
@@ -45,6 +45,6 @@ describe("toDiscoveredApps", () => {
     ];
     const result = toDiscoveredApps(apps);
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ name: "LMS Web", url: "https://lms.example.com" });
+    expect(result[0]).toMatchObject({ name: "LMS Web", url: "https://lms.example.com/cb" });
   });
 });

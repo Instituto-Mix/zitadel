@@ -120,6 +120,8 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                 <Link
                   key={app.id}
                   href={app.url}
+                  target={app.name}
+                  rel="noopener"
                   className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-col rounded-md border px-4 py-3 transition-colors"
                 >
                   <span className="font-medium">{app.name}</span>
