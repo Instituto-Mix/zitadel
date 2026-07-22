@@ -4,7 +4,7 @@ const BASE_DIRECTIVES: Record<string, string[]> = {
   "connect-src": ["'self'"],
   "style-src": ["'self'", "'unsafe-inline'"],
   "font-src": ["'self'"],
-  "img-src": ["'self'"],
+  "img-src": ["'self'", "https:"], // https: for app favicons on /apps
   "frame-ancestors": ["'none'"],
   "object-src": ["'none'"],
 };

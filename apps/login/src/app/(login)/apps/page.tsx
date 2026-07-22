@@ -1,3 +1,4 @@
+import { AppIcon } from "@/components/app-icon";
 import { DynamicTheme } from "@/components/dynamic-theme";
 import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
@@ -136,10 +137,13 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                   target={app.name}
                   rel="noopener"
                   title={app.meta.description ?? undefined}
-                  className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-col rounded-md border px-4 py-3 transition-colors"
+                  className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-row items-center space-x-3 rounded-md border px-4 py-3 transition-colors"
                 >
-                  <span className="font-medium">{app.name}</span>
-                  <span className="text-sm opacity-70">{app.meta.title ?? app.url}</span>
+                  <AppIcon name={app.name} favicon={app.meta.favicon} />
+                  <span className="flex flex-col">
+                    <span className="font-medium">{app.name}</span>
+                    <span className="text-sm opacity-70">{app.meta.title ?? app.url}</span>
+                  </span>
                 </Link>
               ))}
             </div>
