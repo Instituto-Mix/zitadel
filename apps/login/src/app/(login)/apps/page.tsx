@@ -1,4 +1,5 @@
 import { AppIcon } from "@/components/app-icon";
+import { AppLink } from "@/components/app-link";
 import { DynamicTheme } from "@/components/dynamic-theme";
 import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
@@ -11,7 +12,6 @@ import { getBrandingSettings, listApplications, listAuthorizations } from "@/lib
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -131,10 +131,10 @@ export default async function Page(props: { searchParams: Promise<Record<string,
             <h2 className="text-sm font-medium opacity-70">{group.projectName}</h2>
             <div className="flex flex-col space-y-2">
               {group.apps.map((app) => (
-                <Link
+                <AppLink
                   key={app.id}
                   href={app.url}
-                  target={`app-${app.id}`}
+                  name={`app-${app.id}`}
                   title={app.meta.description ?? undefined}
                   className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-row items-center space-x-3 rounded-md border px-4 py-3 transition-colors"
                 >
@@ -143,7 +143,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                     <span className="font-medium">{app.name}</span>
                     <span className="text-sm opacity-70">{app.meta.title ?? app.url}</span>
                   </span>
-                </Link>
+                </AppLink>
               ))}
             </div>
           </div>
