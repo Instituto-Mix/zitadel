@@ -101,7 +101,8 @@ export function UsernameForm({
   return (
     <>
       {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
-      <form className="w-full">
+      {/* onSubmit makes Enter in the loginname input submit the form (same as clicking Continue) */}
+      <form className="w-full" onSubmit={handleSubmit((e) => submitLoginName(e, organization))}>
         <div className="">
           <TextInput
             type="text"
@@ -152,7 +153,6 @@ export function UsernameForm({
             className="self-end"
             variant={ButtonVariants.Primary}
             disabled={loading || !formState.isValid}
-            onClick={handleSubmit((e) => submitLoginName(e, organization))}
           >
             {loading && <Spinner className="mr-2 h-5 w-5" />}
             <Translated i18nKey="submit" namespace="loginname" />
