@@ -462,5 +462,19 @@
     "title": "Applications",
     "description": "These are the applications you have access to.",
     "noResults": "No applications available for your account."
+  },
+  "email": {
+    "title": "Email",
+    "description": "Update your email address.",
+    "label": "New email",
+    "submit": "Continue",
+    "current": "Current email: {email}",
+    "required": {
+      "email": "A valid email is required"
+    },
+    "errors": {
+      "noSession": "No active session.",
+      "couldNotUpdate": "Could not update the email."
+    }
   }
 }

@@ -462,5 +462,19 @@
     "title": "Aplicativos",
     "description": "Estes são os aplicativos que você pode acessar.",
     "noResults": "Nenhum aplicativo disponível para sua conta."
+  },
+  "email": {
+    "title": "E-mail",
+    "description": "Atualize seu endereço de e-mail.",
+    "label": "Novo e-mail",
+    "submit": "Continuar",
+    "current": "E-mail atual: {email}",
+    "required": {
+      "email": "Informe um e-mail válido"
+    },
+    "errors": {
+      "noSession": "Nenhuma sessão ativa.",
+      "couldNotUpdate": "Não foi possível atualizar o e-mail."
+    }
   }
 }

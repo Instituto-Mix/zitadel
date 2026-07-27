@@ -462,5 +462,19 @@
     "title": "Aplicaciones",
     "description": "Estas son las aplicaciones a las que tienes acceso.",
     "noResults": "No hay aplicaciones disponibles para tu cuenta."
+  },
+  "email": {
+    "title": "Correo",
+    "description": "Actualiza tu dirección de correo.",
+    "label": "Nuevo correo",
+    "submit": "Continuar",
+    "current": "Correo actual: {email}",
+    "required": {
+      "email": "Introduce un correo válido"
+    },
+    "errors": {
+      "noSession": "No hay sesión activa.",
+      "couldNotUpdate": "No se pudo actualizar el correo."
+    }
   }
 }

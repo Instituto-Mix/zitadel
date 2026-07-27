@@ -1042,6 +1042,39 @@ export async function createResponse({ serviceConfig, req }: WithServiceConfig<{
   return samlService.createResponse(req);
 }
 
+/**
+ * Set (change) a user's email address. Self-service email update for the
+ * /email page. `verified: true` marks it verified immediately (no ownership
+ * proof — use only when SMTP is unavailable and you trust the input);
+ * otherwise Zitadel sends a verification code to the new address (requires
+ * SMTP) and the caller routes the user to /verify to confirm.
+ */
+export async function setEmail({
+  serviceConfig,
+  userId,
+  email,
+  verified,
+  urlTemplate,
+}: WithServiceConfig<{
+  userId: string;
+  email: string;
+  verified?: boolean;
+  urlTemplate?: string;
+}>) {
+  const userService: Client<typeof UserService> = await createServiceForHost(UserService, serviceConfig);
+
+  return userService.setEmail({
+    userId,
+    email,
+    verification: verified
+      ? { case: "isVerified", value: true }
+      : {
+          case: "sendCode",
+          value: create(SendEmailVerificationCodeSchema, urlTemplate ? { urlTemplate } : {}),
+        },
+  });
+}
+
 export async function verifyEmail({
   serviceConfig,
   userId,

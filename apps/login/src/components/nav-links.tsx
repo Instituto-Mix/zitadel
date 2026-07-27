@@ -2,7 +2,7 @@ import { Button, ButtonVariants } from "@/components/button";
 import { Translated } from "@/components/translated";
 import Link from "next/link";
 
-type NavPage = "accounts" | "apps" | "logout";
+type NavPage = "accounts" | "apps" | "email" | "logout";
 
 /**
  * Footer-like navigation row (fork feature) linking the session pages:
@@ -13,6 +13,7 @@ export function NavLinks({ current }: { current?: NavPage }) {
   const items: { page: NavPage; href: string; namespace: string }[] = [
     { page: "accounts", href: "/accounts", namespace: "accounts" },
     { page: "apps", href: "/apps", namespace: "apps" },
+    { page: "email", href: "/email", namespace: "email" },
     { page: "logout", href: "/logout", namespace: "logout" },
   ];
 
