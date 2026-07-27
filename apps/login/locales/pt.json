@@ -23,7 +23,7 @@
     }
   },
   "loginname": {
-    "title": "Bem-vindo de volta!",
+    "title": "Entrar",
     "description": "Insira seus dados de acesso.",
     "register": "Cadastrar novo usuário",
     "submit": "Continuar",
