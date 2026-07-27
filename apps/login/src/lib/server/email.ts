@@ -6,6 +6,7 @@ import { loadMostRecentSession } from "@/lib/session";
 import { setEmail } from "@/lib/zitadel";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
+import { resendVerification } from "./verify";
 
 const logger = createLogger("email-update");
 
@@ -54,6 +55,37 @@ export async function updateEmail(command: UpdateEmailCommand) {
     if (session?.factors?.user?.loginName) params.set("loginName", session.factors.user.loginName);
     if (command.organization) params.set("organization", command.organization);
     return { redirect: params.toString() ? `/signedin?${params}` : "/signedin" };
+  }
+
+  const params = new URLSearchParams({ userId });
+  if (session?.factors?.user?.loginName) params.set("loginName", session.factors.user.loginName);
+  if (command.organization) params.set("organization", command.organization);
+  if (command.requestId) params.set("requestId", command.requestId);
+  return { redirect: `/verify?${params}` };
+}
+
+/**
+ * Send a verification code for the signed-in user's CURRENT (unverified) email
+ * and route to /verify. Used by the "verify now" action on the /email page.
+ */
+export async function sendCurrentEmailVerification(command: { loginName?: string; organization?: string; requestId?: string }) {
+  const _headers = await headers();
+  const { serviceConfig } = getServiceConfig(_headers);
+  const t = await getTranslations("email");
+
+  const session = await loadMostRecentSession({
+    serviceConfig,
+    sessionParams: { loginName: command.loginName, organization: command.organization },
+  });
+
+  const userId = session?.factors?.user?.id;
+  if (!userId) {
+    return { error: t("errors.noSession") };
+  }
+
+  const result = await resendVerification({ userId, isInvite: false, requestId: command.requestId });
+  if (result && "error" in result && result.error) {
+    return { error: result.error };
   }
 
   const params = new URLSearchParams({ userId });

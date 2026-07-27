@@ -475,6 +475,9 @@
     "errors": {
       "noSession": "No active session.",
       "couldNotUpdate": "Could not update the email."
-    }
+    },
+    "verified": "verified",
+    "unverified": "unverified",
+    "verifyNow": "Verify this email now"
   }
 }

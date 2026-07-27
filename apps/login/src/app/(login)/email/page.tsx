@@ -44,6 +44,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
   const userResponse = await getUserByID({ serviceConfig, userId }).catch(() => undefined);
   const human = userResponse?.user?.type.case === "human" ? userResponse.user.type.value : undefined;
   currentEmail = human?.email?.email;
+  const emailVerified = human?.email?.isVerified ?? false;
 
   return (
     <DynamicTheme branding={branding}>
@@ -66,6 +67,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
       <div className="flex w-full flex-col space-y-6">
         <EmailForm
           currentEmail={currentEmail}
+          verified={emailVerified}
           loginName={loginName ?? sessionFactors?.factors?.user?.loginName}
           organization={organization}
           requestId={requestId}
