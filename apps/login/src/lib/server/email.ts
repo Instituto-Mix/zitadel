@@ -5,6 +5,7 @@ import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { setEmail } from "@/lib/zitadel";
 import { getTranslations } from "next-intl/server";
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { resendVerification } from "./verify";
 
@@ -48,6 +49,10 @@ export async function updateEmail(command: UpdateEmailCommand) {
     logger.error("setEmail failed", { error: error instanceof Error ? error.message : String(error) });
     return { error: t("errors.couldNotUpdate") };
   }
+
+  // the email is now changed (unverified) in Zitadel — invalidate the cached
+  // /email render so navigating Back from /verify shows the new address/badge
+  revalidatePath("/email");
 
   // verified inline → back to the account overview; otherwise confirm the code
   if (markVerified) {

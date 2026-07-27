@@ -71,36 +71,37 @@ export function EmailForm({ currentEmail, verified, loginName, organization, req
 
   return (
     <form className="w-full" onSubmit={handleSubmit(onSubmit)}>
-      {currentEmail && (
-        <div className="mb-4 flex flex-row items-center gap-2">
-          <span className="ztdl-p block">
-            <Translated i18nKey="current" namespace="email" data={{ email: currentEmail }} />
-          </span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              verified
-                ? "bg-green-500/15 text-green-700 dark:text-green-300"
-                : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
-            }`}
+      <div className="border-divider-light dark:border-divider-dark flex flex-col rounded-md border p-4">
+        {currentEmail && (
+          <div className="mb-4 flex flex-row items-center gap-2">
+            <span className="ztdl-p block">
+              <Translated i18nKey="current" namespace="email" data={{ email: currentEmail }} />
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                verified
+                  ? "bg-green-500/15 text-green-700 dark:text-green-300"
+                  : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+              }`}
+            >
+              <Translated i18nKey={verified ? "verified" : "unverified"} namespace="email" />
+            </span>
+          </div>
+        )}
+
+        {currentEmail && !verified && (
+          <button
+            type="button"
+            onClick={onVerifyNow}
+            disabled={loading}
+            data-testid="verify-now-button"
+            className="hover:text-primary-light-500 dark:hover:text-primary-dark-500 mb-4 self-start text-sm transition-all"
           >
-            <Translated i18nKey={verified ? "verified" : "unverified"} namespace="email" />
-          </span>
-        </div>
-      )}
+            <Translated i18nKey="verifyNow" namespace="email" />
+          </button>
+        )}
 
-      {currentEmail && !verified && (
-        <button
-          type="button"
-          onClick={onVerifyNow}
-          disabled={loading}
-          data-testid="verify-now-button"
-          className="hover:text-primary-light-500 dark:hover:text-primary-dark-500 mb-4 text-sm transition-all"
-        >
-          <Translated i18nKey="verifyNow" namespace="email" />
-        </button>
-      )}
-
-      <TextInput
+        <TextInput
         type="email"
         autoComplete="email"
         autoCapitalize="none"
@@ -112,8 +113,9 @@ export function EmailForm({ currentEmail, verified, loginName, organization, req
           pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: t("required.email") },
         })}
         label={t("label")}
-        data-testid="email-text-input"
-      />
+          data-testid="email-text-input"
+        />
+      </div>
 
       {error && (
         <div className="py-4" data-testid="error">
