@@ -1,6 +1,24 @@
+// This module holds a bearer secret. `server-only` makes an accidental import
+// from a client component a build error rather than a leak.
+import "server-only";
+
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("legacy-migrate");
+
+/**
+ * Credentials for the call below. The whole auth concern for the bridge lives
+ * here and nowhere else.
+ *
+ * AUTH_BACKEND_TOKEN must hold the PAT of the dedicated `login-page` Zitadel
+ * machine user (382641673429057539) — not an ad hoc value. It is sent as
+ * `x-zitadel-service-account` and must be treated as a bearer secret: env var
+ * only, server-side only, never logged, never surfaced in an error message, and
+ * never given a NEXT_PUBLIC_ name (which would put it in the client bundle).
+ */
+function getServiceAccountToken(): string | undefined {
+  return process.env.AUTH_BACKEND_TOKEN;
+}
 
 /**
  * First-access bridge from the legacy ERP credential (Track B).
@@ -54,9 +72,9 @@ export async function legacyMigratePassword({
     return "unavailable";
   }
 
-  const token = process.env.AUTH_BACKEND_TOKEN;
+  const token = getServiceAccountToken();
   if (!token) {
-    logger.warn("AUTH_BACKEND_TOKEN not set, skipping legacy-migrate");
+    logger.warn("service account token not set, skipping legacy-migrate");
     return "unavailable";
   }
 
@@ -101,5 +119,5 @@ export async function legacyMigratePassword({
 
 /** True when the legacy first-access bridge is configured for this deployment. */
 export function isLegacyMigrateEnabled(): boolean {
-  return !!process.env.AUTH_BACKEND_URL && !!process.env.AUTH_BACKEND_TOKEN;
+  return !!process.env.AUTH_BACKEND_URL && !!getServiceAccountToken();
 }

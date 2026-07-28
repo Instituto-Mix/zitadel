@@ -1,9 +1,10 @@
 "use server";
 
 import { createLogger } from "@/lib/logger";
+import { usableEmail } from "@/lib/placeholder-email";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
-import { setEmail } from "@/lib/zitadel";
+import { getUserByID, setEmail } from "@/lib/zitadel";
 import { getTranslations } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -86,6 +87,15 @@ export async function sendCurrentEmailVerification(command: { loginName?: string
   const userId = session?.factors?.user?.id;
   if (!userId) {
     return { error: t("errors.noSession") };
+  }
+
+  // The UI hides the button in this case, but this action is callable directly:
+  // a code sent to a missing or placeholder address goes nowhere, and would leave
+  // the user waiting on /verify for a code that cannot arrive.
+  const userResponse = await getUserByID({ serviceConfig, userId }).catch(() => undefined);
+  const human = userResponse?.user?.type.case === "human" ? userResponse.user.type.value : undefined;
+  if (!usableEmail(human?.email?.email)) {
+    return { error: t("errors.noEmailToVerify") };
   }
 
   const result = await resendVerification({ userId, isInvite: false, requestId: command.requestId });

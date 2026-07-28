@@ -474,10 +474,15 @@
     },
     "errors": {
       "noSession": "Nenhuma sessão ativa.",
-      "couldNotUpdate": "Não foi possível atualizar o e-mail."
+      "couldNotUpdate": "Não foi possível atualizar o e-mail.",
+      "noEmailToVerify": "Nenhum e-mail para verificar."
     },
     "verified": "verificado",
     "unverified": "não verificado",
-    "verifyNow": "Verificar este e-mail agora"
+    "verifyNow": "Verificar este e-mail agora",
+    "noEmail": "Nenhum e-mail cadastrado",
+    "missing": "não cadastrado",
+    "labelAdd": "Adicione seu e-mail",
+    "descriptionAdd": "Cadastre seu e-mail para poder recuperar sua senha."
   }
 }

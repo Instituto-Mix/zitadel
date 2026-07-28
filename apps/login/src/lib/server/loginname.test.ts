@@ -204,6 +204,73 @@ describe("sendLoginname", () => {
       mockCreateSessionAndUpdateCookie.mockResolvedValue({ session: mockSession, sessionCookie: {} });
     });
 
+    // Track B first access: provisioned users have no Zitadel auth method and
+    // the invite email below is undeliverable for them. These assert the routing
+    // does NOT fall back to the email path when the bridge is configured — if it
+    // regresses, those users are silently sent to a dead end.
+    describe("legacy first access (bridge configured)", () => {
+      const ORIGINAL_ENV = { ...process.env };
+
+      beforeEach(() => {
+        process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1";
+        process.env.AUTH_BACKEND_TOKEN = "token-123";
+        // the identifier resolver is a separate concern here; fail it open
+        vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("not under test")));
+      });
+
+      afterEach(() => {
+        process.env = { ...ORIGINAL_ENV };
+        vi.unstubAllGlobals();
+      });
+
+      test("should redirect to password, not the invite email, when user has no authentication methods", async () => {
+        mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+
+        const result = await sendLoginname({
+          loginName: "user@example.com",
+          requestId: "req123",
+          organization: "org123",
+        });
+
+        expect(result).toHaveProperty("redirect");
+        expect((result as any).redirect).toMatch(/^\/password\?/);
+        expect((result as any).redirect).not.toContain("invite=true");
+        expect((result as any).redirect).toContain("loginName=user%40example.com");
+        expect((result as any).redirect).toContain("requestId=req123");
+        expect((result as any).redirect).toContain("organization=org123");
+      });
+
+      test("should resolve a legacy identifier and route the canonical loginName to password", async () => {
+        mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+
+        const result = await sendLoginname({ loginName: "12345678901" });
+
+        expect((result as any).redirect).toMatch(/^\/password\?/);
+        // preferredLoginName from the found user, not the typed CPF
+        expect((result as any).redirect).toContain("loginName=user%40example.com");
+      });
+
+      test("should still use the invite email path when local authentication is not allowed", async () => {
+        mockGetLoginSettings.mockResolvedValue({ allowLocalAuthentication: false });
+        mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+
+        const result = await sendLoginname({ loginName: "user@example.com" });
+
+        expect((result as any).redirect).toMatch(/^\/verify\?/);
+        expect((result as any).redirect).toContain("invite=true");
+      });
+
+      test("should use the invite email path when the bridge is not configured", async () => {
+        delete process.env.AUTH_BACKEND_URL;
+        mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+
+        const result = await sendLoginname({ loginName: "user@example.com" });
+
+        expect((result as any).redirect).toMatch(/^\/verify\?/);
+        expect((result as any).redirect).toContain("invite=true");
+      });
+    });
+
     test("should redirect to verify without codeSent when user has no authentication methods and email is unverified", async () => {
       mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
 

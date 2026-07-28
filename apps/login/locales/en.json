@@ -474,10 +474,15 @@
     },
     "errors": {
       "noSession": "No active session.",
-      "couldNotUpdate": "Could not update the email."
+      "couldNotUpdate": "Could not update the email.",
+      "noEmailToVerify": "No email to verify."
     },
     "verified": "verified",
     "unverified": "unverified",
-    "verifyNow": "Verify this email now"
+    "verifyNow": "Verify this email now",
+    "noEmail": "No email on file",
+    "missing": "not on file",
+    "labelAdd": "Add your email",
+    "descriptionAdd": "Add your email so you can recover your password."
   }
 }

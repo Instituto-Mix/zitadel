@@ -3,6 +3,7 @@ import { EmailForm } from "@/components/email-form";
 import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
+import { usableEmail } from "@/lib/placeholder-email";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, getUserByID } from "@/lib/zitadel";
@@ -40,11 +41,12 @@ export default async function Page(props: { searchParams: Promise<Record<string,
 
   const branding = await getBrandingSettings({ serviceConfig, organization });
 
-  let currentEmail: string | undefined;
   const userResponse = await getUserByID({ serviceConfig, userId }).catch(() => undefined);
   const human = userResponse?.user?.type.case === "human" ? userResponse.user.type.value : undefined;
-  currentEmail = human?.email?.email;
-  const emailVerified = human?.email?.isVerified ?? false;
+  // The undeliverable provisioning placeholder is not an address the user has —
+  // treat it as no email on file so the form reads "add your email".
+  const currentEmail = usableEmail(human?.email?.email);
+  const emailVerified = !!currentEmail && (human?.email?.isVerified ?? false);
 
   return (
     <DynamicTheme branding={branding}>
@@ -53,7 +55,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
           <Translated i18nKey="title" namespace="email" />
         </h1>
         <p className="ztdl-p mb-6 block">
-          <Translated i18nKey="description" namespace="email" />
+          <Translated i18nKey={currentEmail ? "description" : "descriptionAdd"} namespace="email" />
         </p>
 
         <UserAvatar

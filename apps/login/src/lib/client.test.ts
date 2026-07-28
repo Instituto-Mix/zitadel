@@ -44,11 +44,13 @@ describe("getNextUrl", () => {
     expect(result).toBe("https://settings.com");
   });
 
-  test("should fallback to relative signedin page if everything else fails (the new default)", async () => {
+  // Fork behaviour: /apps (the launcher) is the default post-login page, so it is
+  // the fallback here rather than upstream's /signedin.
+  test("should fallback to the relative apps page if everything else fails", async () => {
     const { headers } = await import("next/headers");
     vi.mocked(headers).mockRejectedValue(new Error("No headers"));
 
     const result = await getNextUrl(command);
-    expect(result).toBe("/signedin?loginName=test-user");
+    expect(result).toBe("/apps?loginName=test-user");
   });
 });

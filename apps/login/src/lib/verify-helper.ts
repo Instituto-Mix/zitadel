@@ -6,6 +6,7 @@ import crypto from "crypto";
 import moment from "moment";
 import { cookies } from "next/headers";
 import { getFingerprintIdCookie } from "./fingerprint";
+import { isPlaceholderEmail } from "./placeholder-email";
 import { trySendVerification } from "./server/verify";
 
 export function checkPasswordChangeRequired(
@@ -80,7 +81,14 @@ export async function checkEmailVerification(
   organization?: string,
   requestId?: string,
 ) {
-  if (!humanUser?.email?.isVerified && process.env.EMAIL_VERIFICATION === "true") {
+  // The undeliverable provisioning placeholder cannot be verified: a code sent
+  // there goes nowhere and would trap the user on /verify waiting for it. Let
+  // them through — the pending-email badge and the /email page prompt them to ADD
+  // a real address instead. (A wholly absent address keeps the upstream
+  // behaviour; only the placeholder is special-cased here.)
+  const isPlaceholder = isPlaceholderEmail(humanUser?.email?.email);
+
+  if (!isPlaceholder && !humanUser?.email?.isVerified && process.env.EMAIL_VERIFICATION === "true") {
     const codeSent = await trySendVerification({
       userId: session.factors?.user?.id as string,
       isInvite: false,

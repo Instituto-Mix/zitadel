@@ -72,22 +72,30 @@ export function EmailForm({ currentEmail, verified, loginName, organization, req
   return (
     <form className="w-full" onSubmit={handleSubmit(onSubmit)}>
       <div className="border-divider-light dark:border-divider-dark flex flex-col rounded-md border p-4">
-        {currentEmail && (
-          <div className="mb-4 flex flex-row flex-wrap items-center gap-2">
-            <span className="ztdl-p !mb-0 min-w-0 break-all">
+        {/* No usable address on file (missing, or the undeliverable provisioning
+            placeholder) — this must read as "add your email", never show the
+            placeholder as if it were the user's address. */}
+        <div className="mb-4 flex flex-row flex-wrap items-center gap-2">
+          <span className="ztdl-p !mb-0 min-w-0 break-all">
+            {currentEmail ? (
               <Translated i18nKey="current" namespace="email" data={{ email: currentEmail }} />
-            </span>
-            <span
-              className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${
-                verified
-                  ? "bg-green-500/15 text-green-700 dark:text-green-300"
-                  : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
-              }`}
-            >
-              <Translated i18nKey={verified ? "verified" : "unverified"} namespace="email" />
-            </span>
-          </div>
-        )}
+            ) : (
+              <Translated i18nKey="noEmail" namespace="email" />
+            )}
+          </span>
+          <span
+            className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${
+              verified
+                ? "bg-green-500/15 text-green-700 dark:text-green-300"
+                : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+            }`}
+          >
+            <Translated
+              i18nKey={!currentEmail ? "missing" : verified ? "verified" : "unverified"}
+              namespace="email"
+            />
+          </span>
+        </div>
 
         {currentEmail && !verified && (
           <button
@@ -112,7 +120,7 @@ export function EmailForm({ currentEmail, verified, loginName, organization, req
           required: t("required.email"),
           pattern: { value: /^[^@\s]+@[^@\s]+\.[^@\s]+$/, message: t("required.email") },
         })}
-        label={t("label")}
+        label={currentEmail ? t("label") : t("labelAdd")}
           data-testid="email-text-input"
         />
       </div>

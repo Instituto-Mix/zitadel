@@ -595,6 +595,38 @@ describe("checkEmailVerification", () => {
     expect(result?.redirect).toContain("codeSent=true");
   });
 
+  // Track B: the provisioning placeholder is undeliverable, so gating login on
+  // verifying it would trap the user waiting for a code that cannot arrive.
+  it("should not redirect for the undeliverable placeholder address", async () => {
+    process.env.EMAIL_VERIFICATION = "true";
+
+    const humanUser: any = {
+      email: {
+        email: "email@invalido.troque",
+        isVerified: false,
+      },
+    };
+
+    const result = await checkEmailVerification(mockSession, humanUser);
+
+    expect(result).toBeUndefined();
+  });
+
+  it("should still redirect for a real unverified address", async () => {
+    process.env.EMAIL_VERIFICATION = "true";
+
+    const humanUser: any = {
+      email: {
+        email: "user@example.com",
+        isVerified: false,
+      },
+    };
+
+    const result = await checkEmailVerification(mockSession, humanUser);
+
+    expect(result).toEqual({ redirect: expect.stringContaining("/verify") });
+  });
+
   it("should not redirect if EMAIL_VERIFICATION is not true", async () => {
     process.env.EMAIL_VERIFICATION = "false";
 
