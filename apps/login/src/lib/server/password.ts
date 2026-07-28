@@ -4,6 +4,7 @@ import { isClassifiedError } from "@/lib/grpc/interceptors/error-classification"
 import { createLogger } from "@/lib/logger";
 import { recordAuthAttempt, recordAuthFailure, recordAuthSuccess } from "@/lib/metrics";
 import { createSessionAndUpdateCookie, setSessionAndUpdateCookie } from "@/lib/server/cookie";
+import { isLegacyMigrateEnabled, legacyMigratePassword } from "@/lib/server/legacy-migrate";
 import {
   getLockoutSettings,
   getLoginSettings,
@@ -20,7 +21,10 @@ import { Code, create, Duration } from "@zitadel/client";
 import { Checks, ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
 import { LoginSettings } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { User, UserState } from "@zitadel/proto/zitadel/user/v2/user_pb";
-import { SetPasswordRequestSchema } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
+import {
+  AuthenticationMethodType,
+  SetPasswordRequestSchema,
+} from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { completeFlowOrGetUrl } from "../client";
@@ -135,6 +139,48 @@ export type UpdateSessionCommand = {
   checks: Checks;
   requestId?: string;
 };
+
+/**
+ * First-access bridge (Track B). Called only after a normal Zitadel password
+ * check has already failed. Returns true when the backend verified the typed
+ * password against the legacy ERP digest and set a real Zitadel password, so the
+ * caller should retry auth; false in every other case (including "user already
+ * has a Zitadel password" — an ordinary wrong password, not a first access).
+ *
+ * Guarded on the user having no PASSWORD auth method, so a normal user's typo is
+ * never forwarded to the backend.
+ */
+async function tryLegacyFirstAccess({
+  serviceConfig,
+  userId,
+  loginName,
+  password,
+}: {
+  serviceConfig: Parameters<typeof listAuthenticationMethodTypes>[0]["serviceConfig"];
+  userId: string;
+  loginName: string;
+  password?: string;
+}): Promise<boolean> {
+  if (!password || !isLegacyMigrateEnabled()) {
+    return false;
+  }
+
+  try {
+    const methods = await listAuthenticationMethodTypes({ serviceConfig, userId });
+    if (methods.authMethodTypes?.includes(AuthenticationMethodType.PASSWORD)) {
+      // The user does have a Zitadel password — this was simply the wrong one.
+      return false;
+    }
+  } catch (error) {
+    logger.warn("could not list auth methods for first-access check", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+
+  const outcome = await legacyMigratePassword({ loginName, password });
+  return outcome === "migrated";
+}
 
 export async function sendPassword(
   command: UpdateSessionCommand,
@@ -265,20 +311,20 @@ export async function sendPassword(
         }
       }
 
-      const checks = create(ChecksSchema, {
-        user: { search: { case: "userId", value: user.userId } },
-        password: { password: command.checks.password?.password },
-      });
-
-      try {
-        const result = await createSessionAndUpdateCookie({
-          checks,
+      const userId = user.userId;
+      const attemptSession = () =>
+        createSessionAndUpdateCookie({
+          checks: create(ChecksSchema, {
+            user: { search: { case: "userId", value: userId } },
+            password: { password: command.checks.password?.password },
+          }),
           requestId: command.requestId,
           lifetime: loginSettingsByContext?.passwordCheckLifetime,
         });
-        session = result.session;
-        sessionCookie = result.sessionCookie;
-      } catch (error: any) {
+
+      // Shared failure rendering, so the first attempt and the post-migration
+      // retry surface the same (deliberately vague) message.
+      const passwordFailure = async (error: any): Promise<{ error: string }> => {
         if ("failedAttempts" in error && error.failedAttempts) {
           recordAuthFailure("password", "invalid_password", command.organization);
           if (loginSettingsByContext?.ignoreUnknownUsernames) {
@@ -304,6 +350,41 @@ export async function sendPassword(
           return { error: t("errors.failedToAuthenticateNoLimit") };
         }
         return { error: t("errors.couldNotCreateSessionForUser") };
+      };
+
+      try {
+        const result = await attemptSession();
+        session = result.session;
+        sessionCookie = result.sessionCookie;
+      } catch (error: any) {
+        // First access (Track B): provisioned users have no Zitadel password,
+        // only a legacy ERP digest, and email flows are undeliverable for them.
+        // Bridge through the backend, which verifies the typed password against
+        // the ERP and — on a match — sets it as the Zitadel password with
+        // changeRequired=true. Then retry normal Zitadel auth once.
+        const bridged = await tryLegacyFirstAccess({
+          serviceConfig,
+          userId,
+          loginName: user.preferredLoginName ?? command.loginName,
+          password: command.checks.password?.password,
+        });
+
+        if (!bridged) {
+          return passwordFailure(error);
+        }
+
+        try {
+          const result = await attemptSession();
+          session = result.session;
+          sessionCookie = result.sessionCookie;
+          // The copy of `user` from searchUsers predates the migration, so its
+          // passwordChangeRequired is stale (false). Drop it and let the block
+          // below re-read the user, otherwise the mandatory password-change
+          // screen would be skipped.
+          user = undefined;
+        } catch (retryError: any) {
+          return passwordFailure(retryError);
+        }
       }
     } else {
       // this is a fake error message to hide that the user does not even exist

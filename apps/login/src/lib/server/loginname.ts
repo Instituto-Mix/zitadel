@@ -27,6 +27,7 @@ import {
 import { createSessionAndUpdateCookie } from "./cookie";
 import { getPublicHost } from "./host";
 import { resolveLegacyIdentifier, substituteLoginName } from "./legacy-identifier";
+import { isLegacyMigrateEnabled } from "./legacy-migrate";
 import { trySendVerification } from "./verify";
 
 const logger = createLogger("loginname");
@@ -344,6 +345,29 @@ export async function sendLoginname(command: SendLoginnameCommand) {
           m === AuthenticationMethodType.PASSKEY ||
           m === AuthenticationMethodType.IDP,
       ) ?? false;
+
+    // First access (Track B): provisioned users have no Zitadel auth method at
+    // all — their only credential is the legacy ERP password — and the invite /
+    // verification email below is undeliverable for them (missing or wrong
+    // addresses, plus the `email@invalido.troque` placeholder). Send them to the
+    // password screen instead; sendPassword bridges the typed ERP password
+    // through the backend and Zitadel then forces a password change.
+    if (!hasPrimaryMethod && isLegacyMigrateEnabled() && userLoginSettings?.allowLocalAuthentication) {
+      const paramsFirstAccess = new URLSearchParams({
+        loginName: (session?.factors?.user?.loginName ?? user.preferredLoginName) as string,
+      });
+
+      if (command.requestId) {
+        paramsFirstAccess.append("requestId", command.requestId);
+      }
+
+      if (organization) {
+        paramsFirstAccess.append("organization", organization);
+      }
+
+      logger.debug("no primary auth method, routing to password for legacy first access");
+      return { redirect: "/password?" + paramsFirstAccess };
+    }
 
     // always resend invite or setup email if user has no primary auth method set
     if (!hasPrimaryMethod) {
