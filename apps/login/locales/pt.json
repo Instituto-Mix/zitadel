@@ -371,7 +371,7 @@
     }
   },
   "signedin": {
-    "title": "Bem-vindo, {user}!",
+    "title": "Entrar",
     "description": "Você está conectado.",
     "continue": "Continuar",
     "error": {
