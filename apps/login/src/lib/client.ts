@@ -16,6 +16,7 @@ function goToSignedInPage(
   props:
     | { sessionId: string; organization?: string; requestId?: string }
     | { organization?: string; loginName: string; requestId?: string },
+  path: string = "/signedin",
 ) {
   const params = new URLSearchParams({});
 
@@ -36,7 +37,7 @@ function goToSignedInPage(
     params.append("requestId", props.requestId);
   }
 
-  return `/signedin?` + params;
+  return `${path}?` + params;
 }
 
 /**
@@ -148,8 +149,8 @@ export async function resolveRedirectUri(command: FinishFlowCommand, defaultRedi
     }
   }
 
-  // 3. Default signed-in page (relative)
-  const result = goToSignedInPage(command);
+  // 3. Default post-login page (relative): the app launcher
+  const result = goToSignedInPage(command, "/apps");
   console.log("resolveRedirectUri: Using relative goToSignedInPage result:", result);
   return result;
 }

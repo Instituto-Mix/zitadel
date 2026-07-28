@@ -6,6 +6,7 @@ import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { DiscoverableApp, toDiscoveredApps } from "@/lib/apps-discovery";
 import { fetchSiteMeta, SiteMeta } from "@/lib/site-meta";
+import { isEmailPending } from "@/lib/email-status";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, listApplications, listAuthorizations } from "@/lib/zitadel";
@@ -45,6 +46,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
   }
 
   const branding = await getBrandingSettings({ serviceConfig, organization });
+  const emailPending = await isEmailPending(serviceConfig, userId);
 
   let groups: {
     projectId: string;
@@ -149,7 +151,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
           </div>
         ))}
 
-        <NavLinks current="apps" />
+        <NavLinks current="apps" emailPending={emailPending} />
       </div>
     </DynamicTheme>
   );

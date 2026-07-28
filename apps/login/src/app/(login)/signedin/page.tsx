@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { resolveRedirectUri } from "@/lib/client";
 import { getMostRecentCookieWithLoginname, getSessionCookieById } from "@/lib/cookies";
 import { completeDeviceAuthorization } from "@/lib/server/device";
+import { isEmailPending } from "@/lib/email-status";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, getLoginSettings, getSession, ServiceConfig } from "@/lib/zitadel";
@@ -80,6 +81,8 @@ export default async function Page(props: { searchParams: Promise<any> }) {
     ? await loadSessionById(serviceConfig, sessionId, organization)
     : await loadMostRecentSession({ serviceConfig, sessionParams: { loginName, organization } });
 
+  const emailPending = await isEmailPending(serviceConfig, sessionFactors?.factors?.user?.id);
+
   let loginSettings;
   if (!requestId) {
     loginSettings = await getLoginSettings({ serviceConfig, organization });
@@ -129,7 +132,7 @@ export default async function Page(props: { searchParams: Promise<any> }) {
           </div>
         )}
 
-        <NavLinks />
+        <NavLinks emailPending={emailPending} />
       </div>
     </DynamicTheme>
   );
