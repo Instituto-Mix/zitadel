@@ -87,9 +87,9 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 |---|---|---|
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
-| `AUTH_BACKEND_URL` | for Track B | Resolver base URL. If unset, legacy-identifier resolution is skipped and only real `loginName`s work (fail-open). |
-| `AUTH_BACKEND_TOKEN` | for Track B | Shared bearer token the backend's `require_zitadel_service_account` guard checks. |
-| `EMAIL_VERIFICATION` | no | `true`/`false`. |
+| `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
+| `AUTH_BACKEND_TOKEN` | for Track B | PAT of the dedicated `login-page` machine user (`382641673429057539`), checked by the backend's `require_zitadel_service_account` guard on **both** endpoints — so that account must be authorized for both. Sent as `x-zitadel-service-account`. Bearer secret: server-side only, never logged. |
+| `EMAIL_VERIFICATION` | no | `true`/`false`. Gates login on verifying a real unverified address, so it needs working SMTP. The undeliverable `invalido.troque` placeholder is exempt either way. |
 | `OTEL_SDK_DISABLED` | no | `true` unless you run an OpenTelemetry collector. |
 | `CSP_FETCH_ENABLED` | no | `false` to skip fetching iframe origins from Zitadel for CSP. |
 
