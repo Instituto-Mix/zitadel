@@ -30,34 +30,43 @@ function getServiceAccountToken(): string | undefined {
  * provisioner substitutes the undeliverable placeholder `email@invalido.troque`.
  *
  * So first access bridges through the backend instead: we hand it the loginName
- * and the password the user just typed. If it matches the ERP digest, the
- * backend sets a real Zitadel password with changeRequired=true and we retry
- * normal Zitadel auth with the same password — Zitadel then drives its own
- * mandatory password-change screen.
+ * and the password the user just typed. The ERP credential is PROOF OF IDENTITY
+ * ONLY — it is never installed as the Zitadel password. The ERP stores an
+ * unsalted MD5 that can neither be inspected nor reversed, so there is no way to
+ * know in advance whether it satisfies Zitadel's complexity policy, and most
+ * legacy passwords do not. Instead the backend returns a short-lived
+ * password-reset code, and the user must choose a new, compliant password. That
+ * choice IS the mandatory rotation — there is no separate forced-change screen,
+ * because no old password is ever installed.
  *
  * The endpoint is idempotent-safe: a second call for a user who already has a
  * Zitadel password returns 409, never a re-migration.
  */
 
-export type LegacyMigrateOutcome =
-  /** 204 — ERP password matched, a Zitadel password now exists. Retry auth. */
-  | "migrated"
+export type LegacyMigrateResult =
+  /**
+   * 200 — the ERP password matched. `resetCode` authorizes setting that user's
+   * Zitadel password: it is BEARER-GRADE, must stay server-side, and must never
+   * be logged, put in a URL, or sent to the browser.
+   */
+  | { outcome: "verified"; userId: string; resetCode: string }
   /** 409 — user already has a Zitadel password. Do not retry this endpoint. */
-  | "has_password"
+  | { outcome: "has_password" }
   /**
    * 403 — not verifiable: unknown user, no stored digest, wrong password, or
    * not yet provisioned. The backend deliberately collapses these into one
    * status; callers must not try to tell them apart or use it to probe accounts.
    */
-  | "not_verifiable"
+  | { outcome: "not_verifiable" }
   /** Not configured, unreachable, or an unexpected status. Treated as a miss. */
-  | "unavailable";
+  | { outcome: "unavailable" };
 
 /**
- * Ask the backend to verify the typed password against the legacy ERP digest and,
- * on a match, set it as the user's Zitadel password (changeRequired=true).
+ * Ask the backend to verify the typed password against the legacy ERP digest.
+ * On a match it returns the user id and a password-reset code; the caller must
+ * then have the user choose a new password and spend that code server-side.
  *
- * Never logs the loginName or the password.
+ * Never logs the loginName, the password, or the reset code.
  */
 export async function legacyMigratePassword({
   loginName,
@@ -65,21 +74,21 @@ export async function legacyMigratePassword({
 }: {
   loginName: string;
   password: string;
-}): Promise<LegacyMigrateOutcome> {
+}): Promise<LegacyMigrateResult> {
   const backendUrl = process.env.AUTH_BACKEND_URL;
   if (!backendUrl) {
     logger.debug("AUTH_BACKEND_URL not set, skipping legacy-migrate");
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 
   const token = getServiceAccountToken();
   if (!token) {
     logger.warn("service account token not set, skipping legacy-migrate");
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 
   if (!loginName || !password) {
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 
   try {
@@ -98,22 +107,34 @@ export async function legacyMigratePassword({
     });
 
     switch (response.status) {
-      case 204:
-        logger.info("legacy password migrated, retrying zitadel auth");
-        return "migrated";
+      case 200: {
+        const body = await response.json().catch(() => undefined);
+        const userId = body?.user_id;
+        const resetCode = body?.reset_code;
+
+        if (userId === undefined || userId === null || !resetCode) {
+          // Without both fields the rotation cannot be completed, and there is
+          // no installed password to fall back on. Treat it as a miss.
+          logger.warn("legacy-migrate returned 200 without user_id/reset_code");
+          return { outcome: "unavailable" };
+        }
+
+        logger.info("legacy credential verified, prompting for a new password");
+        return { outcome: "verified", userId: String(userId), resetCode: String(resetCode) };
+      }
       case 409:
-        return "has_password";
+        return { outcome: "has_password" };
       case 403:
-        return "not_verifiable";
+        return { outcome: "not_verifiable" };
       default:
         logger.warn("legacy-migrate returned unexpected status", { status: response.status });
-        return "unavailable";
+        return { outcome: "unavailable" };
     }
   } catch (error) {
     logger.warn("legacy-migrate call failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 }
 

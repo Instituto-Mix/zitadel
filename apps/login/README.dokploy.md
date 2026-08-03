@@ -16,6 +16,58 @@ work even if the resolver is down.
 
 ---
 
+## First access via the legacy ERP password
+
+Provisioned users have no Zitadel password, and the email fallback is dead for them:
+about half the ERP addresses are missing or wrong, and provisioning substitutes the
+undeliverable placeholder `email@invalido.troque`. So first access bridges through the
+backend instead.
+
+1. The user types their `loginName` and their **ERP** password. Zitadel's own password
+   check fails (there is no Zitadel password yet).
+2. Only if the user has **no** `PASSWORD` auth method, the app POSTs
+   `{login_name, password}` to `{AUTH_BACKEND_URL}/auth/legacy-migrate`. A `200` means
+   the ERP digest matched and carries a **password-reset code**; `409` (already has a
+   password) and `403` (anything else) are deliberately indistinguishable to the user.
+3. The ERP password is **proof of identity only — it is never installed**. The ERP
+   stores an unsalted MD5 that cannot be inspected or reversed, so there is no way to
+   know whether it satisfies Zitadel's complexity policy, and most legacy passwords do
+   not. The user is redirected to `/password/first-access` to choose a new password;
+   Zitadel enforces its policy there and its validation message is shown verbatim so
+   the user can retry — a rejected password does not consume the reset code, so no
+   second ERP round-trip is needed. **This is the mandatory rotation** — there is no
+   separate forced-change screen.
+4. The app then signs the user in with the newly chosen password and continues the
+   normal session/MFA/redirect flow.
+
+The provisioner pins Zitadel's `userId` to the ERP pessoa id at creation, so for a
+provisioned user the two ids are the same value. The app still spends the code against
+the id **it** resolved, never the one in the response body; if the two disagree the user
+was created out-of-band, the code belongs to a different id, and the app **fails closed**
+with an integrity error rather than claiming the password was wrong.
+
+The reset code is bearer-grade: it authorizes setting that user's password. Zitadel
+issues it with a 1 h TTL (`SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE`); the app holds it
+in a deliberately stricter short-lived, in-memory, server-side ticket
+(`src/lib/server/first-access-ticket.ts`, 10 min, max 5 attempts) and it never reaches
+the browser, a URL, or a log. Zitadel keeps only **one** outstanding reset code per
+user — issuing a new one invalidates the previous (`CODE-woT0xc`) — so the ticket store
+is indexed by user id and a new first access **supersedes** any earlier live ticket for
+that user, rather than leaving it behind holding a code that can no longer be redeemed — the browser
+only holds the opaque `first_access` httpOnly handle cookie. Because the ticket is
+in-process, **run the login app single-instance (or with session affinity)** while this
+feature is on; otherwise the second request can land on an instance that never saw the
+ticket and the user sees an expired flow.
+
+**Deploy windows interrupt first access.** Any restart — a deploy, a crash, an OOM, a
+container reschedule — drops every in-flight ticket, and those users must re-enter their
+ERP password and start over. Observed for real during testing (a dev hot reload did it).
+Nothing is lost or corrupted and the reset code is not reused; the user simply sees
+"this first access session has expired". Worth timing rollouts away from a migration
+batch rather than fixing with a shared store today.
+
+---
+
 ## Files
 
 | File | Purpose |
@@ -87,7 +139,7 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 |---|---|---|
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
-| `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
+| `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password — see above). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
 | `AUTH_BACKEND_TOKEN` | for Track B | PAT of the dedicated `login-page` machine user (`382641673429057539`), checked by the backend's `require_zitadel_service_account` guard on **both** endpoints — so that account must be authorized for both. Sent as `x-zitadel-service-account`. Bearer secret: server-side only, never logged. |
 | `EMAIL_VERIFICATION` | no | `true`/`false`. Gates login on verifying a real unverified address, so it needs working SMTP. The undeliverable `invalido.troque` placeholder is exempt either way. |
 | `OTEL_SDK_DISABLED` | no | `true` unless you run an OpenTelemetry collector. |

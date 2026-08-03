@@ -153,6 +153,14 @@
       "sessionNotValid": "Sitzung ist nicht gültig",
       "passwordVerificationMissing": "Passwort-Verifizierung fehlt.",
       "passwordVerificationTooOld": "Passwort-Verifizierung ist zu alt. Bitte verifizieren Sie Ihr Passwort erneut."
+    },
+    "firstAccess": {
+      "title": "Choose your password",
+      "description": "Your legacy credentials were confirmed. Choose a new password to finish setting up your account.",
+      "errors": {
+        "expired": "This first access session has expired. Please sign in again to restart.",
+        "integrity": "Your account is not ready for first access yet. Please contact support — no password change was made."
+      }
     }
   },
   "idp": {

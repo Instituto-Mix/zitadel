@@ -153,6 +153,14 @@
       "sessionNotValid": "A sessão não é válida",
       "passwordVerificationMissing": "A verificação de senha está ausente.",
       "passwordVerificationTooOld": "A verificação de senha expirou. Por favor, verifique sua senha novamente."
+    },
+    "firstAccess": {
+      "title": "Escolha sua senha",
+      "description": "Suas credenciais antigas foram confirmadas. Escolha uma nova senha para concluir o acesso à sua conta.",
+      "errors": {
+        "expired": "Esta sessão de primeiro acesso expirou. Entre novamente para recomeçar.",
+        "integrity": "Sua conta ainda não está pronta para o primeiro acesso. Entre em contato com o suporte — nenhuma senha foi alterada."
+      }
     }
   },
   "idp": {

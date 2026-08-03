@@ -4,6 +4,13 @@ import { isClassifiedError } from "@/lib/grpc/interceptors/error-classification"
 import { createLogger } from "@/lib/logger";
 import { recordAuthAttempt, recordAuthFailure, recordAuthSuccess } from "@/lib/metrics";
 import { createSessionAndUpdateCookie, setSessionAndUpdateCookie } from "@/lib/server/cookie";
+import {
+  discardFirstAccessTicket,
+  FIRST_ACCESS_COOKIE_NAME,
+  FIRST_ACCESS_TTL_MS,
+  storeFirstAccessTicket,
+  takeFirstAccessTicket,
+} from "@/lib/server/first-access-ticket";
 import { isLegacyMigrateEnabled, legacyMigratePassword } from "@/lib/server/legacy-migrate";
 import {
   getLockoutSettings,
@@ -21,12 +28,9 @@ import { Code, create, Duration } from "@zitadel/client";
 import { Checks, ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
 import { LoginSettings } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { User, UserState } from "@zitadel/proto/zitadel/user/v2/user_pb";
-import {
-  AuthenticationMethodType,
-  SetPasswordRequestSchema,
-} from "@zitadel/proto/zitadel/user/v2/user_service_pb";
+import { AuthenticationMethodType, SetPasswordRequestSchema } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { getTranslations } from "next-intl/server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { completeFlowOrGetUrl } from "../client";
 import { getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
 import { getServiceConfig } from "../service-url";
@@ -142,10 +146,13 @@ export type UpdateSessionCommand = {
 
 /**
  * First-access bridge (Track B). Called only after a normal Zitadel password
- * check has already failed. Returns true when the backend verified the typed
- * password against the legacy ERP digest and set a real Zitadel password, so the
- * caller should retry auth; false in every other case (including "user already
- * has a Zitadel password" — an ordinary wrong password, not a first access).
+ * check has already failed. On success the backend has verified the typed
+ * password against the legacy ERP digest and returned a password-reset code —
+ * it has NOT installed a password, so the caller cannot retry auth; it must send
+ * the user to the "choose a new password" screen instead.
+ *
+ * Returns undefined in every other case, including "user already has a Zitadel
+ * password" (an ordinary wrong password, not a first access).
  *
  * Guarded on the user having no PASSWORD auth method, so a normal user's typo is
  * never forwarded to the backend.
@@ -160,26 +167,48 @@ async function tryLegacyFirstAccess({
   userId: string;
   loginName: string;
   password?: string;
-}): Promise<boolean> {
+}): Promise<{ userId: string; resetCode: string } | "mismatch" | undefined> {
   if (!password || !isLegacyMigrateEnabled()) {
-    return false;
+    return undefined;
   }
 
   try {
     const methods = await listAuthenticationMethodTypes({ serviceConfig, userId });
     if (methods.authMethodTypes?.includes(AuthenticationMethodType.PASSWORD)) {
       // The user does have a Zitadel password — this was simply the wrong one.
-      return false;
+      return undefined;
     }
   } catch (error) {
     logger.warn("could not list auth methods for first-access check", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return false;
+    return undefined;
   }
 
-  const outcome = await legacyMigratePassword({ loginName, password });
-  return outcome === "migrated";
+  const result = await legacyMigratePassword({ loginName, password });
+  if (result.outcome !== "verified") {
+    return undefined;
+  }
+
+  // The provisioner pins Zitadel's userId to the ERP pessoa id at creation, so
+  // for every user it created the two ids are the same value and the reset code
+  // is issued against that id. A user created out-of-band keeps a snowflake id,
+  // and the code would then be issued against an id that is not this user's —
+  // spending it would just fail ("Codigo nao encontrado", COMMAND-2M9fs).
+  //
+  // So a mismatch is an integrity problem between provisioning and the instance,
+  // never a credential problem. Fail closed and say so, rather than telling the
+  // user their password was wrong.
+  if (result.userId !== userId) {
+    logger.error("first-access id mismatch: backend reset code is not for the resolved Zitadel user", {
+      resolvedUserId: userId,
+      backendUserId: result.userId,
+    });
+    return "mismatch";
+  }
+
+  // Only the code is taken from the backend; the id is the one we resolved.
+  return { userId, resetCode: result.resetCode };
 }
 
 export async function sendPassword(
@@ -360,8 +389,9 @@ export async function sendPassword(
         // First access (Track B): provisioned users have no Zitadel password,
         // only a legacy ERP digest, and email flows are undeliverable for them.
         // Bridge through the backend, which verifies the typed password against
-        // the ERP and — on a match — sets it as the Zitadel password with
-        // changeRequired=true. Then retry normal Zitadel auth once.
+        // the ERP and — on a match — returns a password-reset code. The ERP
+        // password is proof of identity only and is never installed, so there is
+        // nothing to retry auth with: the user has to choose a new password now.
         const bridged = await tryLegacyFirstAccess({
           serviceConfig,
           userId,
@@ -369,22 +399,42 @@ export async function sendPassword(
           password: command.checks.password?.password,
         });
 
+        if (bridged === "mismatch") {
+          // Provisioning is out of step with this instance. The credential was
+          // fine, so do not claim otherwise and do not count it as a failure.
+          recordAuthFailure("password", "first_access_id_mismatch", command.organization);
+          return { error: t("firstAccess.errors.integrity") };
+        }
+
         if (!bridged) {
           return passwordFailure(error);
         }
 
-        try {
-          const result = await attemptSession();
-          session = result.session;
-          sessionCookie = result.sessionCookie;
-          // The copy of `user` from searchUsers predates the migration, so its
-          // passwordChangeRequired is stale (false). Drop it and let the block
-          // below re-read the user, otherwise the mandatory password-change
-          // screen would be skipped.
-          user = undefined;
-        } catch (retryError: any) {
-          return passwordFailure(retryError);
-        }
+        // The reset code stays server-side; the browser gets only an opaque
+        // handle. Nothing about the ticket goes into the redirect URL.
+        const handle = storeFirstAccessTicket({
+          userId: bridged.userId,
+          resetCode: bridged.resetCode,
+          loginName: user.preferredLoginName ?? command.loginName,
+          organization: command.organization,
+          requestId: command.requestId,
+        });
+
+        const cookiesList = await cookies();
+        cookiesList.set({
+          name: FIRST_ACCESS_COOKIE_NAME,
+          value: handle,
+          httpOnly: true,
+          path: "/",
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: FIRST_ACCESS_TTL_MS / 1000,
+        });
+
+        // Route-relative, like every other redirect this module returns: the
+        // client pushes it through next/navigation, which prefixes
+        // NEXT_PUBLIC_BASE_PATH itself. Adding it here doubles the prefix.
+        return { redirect: "/password/first-access" };
       }
     } else {
       // this is a fake error message to hide that the user does not even exist
@@ -524,6 +574,83 @@ export async function sendPassword(
 
   recordAuthFailure("password", "navigation_failed", command.organization);
   return { error: "Authentication completed but navigation failed" };
+}
+
+/**
+ * Second half of first access (Track B): the user has proven their identity with
+ * the legacy ERP credential and now chooses the password that will actually be
+ * installed. This is the mandatory rotation — the ERP password is never used as
+ * a Zitadel password, so there is no separate forced-change screen.
+ *
+ * The reset code is read from the server-side ticket store; the browser only
+ * ever sent the opaque handle cookie. Zitadel enforces the complexity policy on
+ * the call below, so its validation message is surfaced verbatim and the user
+ * can retry with the same ticket.
+ */
+export async function completeFirstAccess({
+  password,
+}: {
+  password: string;
+}): Promise<{ error: string } | { redirect: string } | { samlData: { url: string; fields: Record<string, string> } }> {
+  const _headers = await headers();
+  const { serviceConfig } = getServiceConfig(_headers);
+  const t = await getTranslations("password");
+
+  const cookiesList = await cookies();
+  const handle = cookiesList.get(FIRST_ACCESS_COOKIE_NAME)?.value;
+  const ticket = takeFirstAccessTicket(handle);
+
+  if (!ticket) {
+    return { error: t("firstAccess.errors.expired") };
+  }
+
+  try {
+    const result = await setUserPassword({
+      serviceConfig,
+      userId: ticket.userId,
+      password,
+      code: ticket.resetCode,
+    });
+
+    // setUserPassword folds a FailedPrecondition into a returned error instead of
+    // throwing; the ticket stays alive so the user can correct and retry.
+    if (result && "error" in result && result.error) {
+      return { error: result.error };
+    }
+  } catch (error: any) {
+    // Zitadel rejects a password that violates the complexity policy here. Its
+    // message names the missing requirement ("A senha deve conter letras
+    // minusculas"), which is exactly what the user needs, so pass it through
+    // rather than a generic failure. Only for errors Zitadel classes as caused
+    // by the input — a server fault must not have its internals rendered.
+    const isUserError = isClassifiedError(error) ? error.isUserError : error?.name === "ConnectError";
+    if (isUserError && error.message) {
+      // ConnectError prefixes the message with its code, e.g. "[invalid_argument] …".
+      return { error: String(error.message).replace(/^\[[a-z_]+\]\s*/, "") };
+    }
+    logger.warn("could not set first-access password", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { error: t("set.errors.couldNotSetPassword") };
+  }
+
+  // The password is installed: the ticket and its reset code must not outlive it.
+  discardFirstAccessTicket(handle);
+  cookiesList.delete(FIRST_ACCESS_COOKIE_NAME);
+
+  // A freshly set password is not immediately visible to the session check.
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // Now authenticate normally with the password the user just chose, which runs
+  // the usual session/MFA/redirect flow.
+  return sendPassword({
+    loginName: ticket.loginName,
+    organization: ticket.organization,
+    requestId: ticket.requestId,
+    checks: create(ChecksSchema, {
+      password: { password },
+    }),
+  });
 }
 
 // this function lets users with code set a password or users with valid User Verification Check

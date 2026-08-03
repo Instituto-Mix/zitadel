@@ -3,11 +3,18 @@ import { ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_
 import { UserState } from "@zitadel/proto/zitadel/user/v2/user_pb";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { sendPassword } from "./password";
+import { completeFirstAccess, sendPassword } from "./password";
 
 // Mock dependencies
+const cookieStore = {
+  get: vi.fn(),
+  set: vi.fn(),
+  delete: vi.fn(),
+};
+
 vi.mock("next/headers", () => ({
   headers: vi.fn(),
+  cookies: vi.fn(),
 }));
 
 vi.mock("@zitadel/client", () => ({
@@ -20,6 +27,7 @@ vi.mock("@zitadel/client", () => ({
     }
   },
   timestampDate: (ts: any) => new Date(ts.seconds * 1000),
+  Code: { FailedPrecondition: 9 },
 }));
 
 vi.mock("@zitadel/client/v2", () => ({
@@ -64,8 +72,6 @@ vi.mock("@/lib/server/legacy-migrate", () => ({
 }));
 
 vi.mock("../verify-helper", () => ({
-  // Real-ish: the forced-change redirect depends entirely on the freshness of the
-  // humanUser passed in, which is what these tests are about.
   checkPasswordChangeRequired: vi.fn((_expiry: any, _session: any, humanUser: any) =>
     humanUser?.passwordChangeRequired ? { redirect: "/password/change?loginName=testuser" } : undefined,
   ),
@@ -78,19 +84,13 @@ vi.mock("next-intl/server", () => ({
   getTranslations: vi.fn(() => (key: string) => key),
 }));
 
-/** The user as searchUsers returns it BEFORE migration: no password yet. */
-const STALE_USER = {
+/** A provisioned user: no Zitadel password, only a legacy ERP digest. */
+const USER = {
   userId: "user123",
   preferredLoginName: "testuser",
   details: { resourceOwner: "org123" },
   state: UserState.ACTIVE,
   type: { case: "human", value: { email: { email: "a@b.com", isVerified: true }, passwordChangeRequired: false } },
-};
-
-/** The same user AFTER the backend set the ERP password with changeRequired=true. */
-const FRESH_USER = {
-  ...STALE_USER,
-  type: { case: "human", value: { email: { email: "a@b.com", isVerified: true }, passwordChangeRequired: true } },
 };
 
 const SESSION = {
@@ -100,6 +100,12 @@ const SESSION = {
     password: { verifiedAt: { seconds: 100 } },
   },
 };
+
+/**
+ * The provisioner pins Zitadel's userId to the ERP pessoa id, so for a
+ * provisioned user the backend's user_id equals the id the login app resolved.
+ */
+const VERIFIED = { outcome: "verified", userId: "user123", resetCode: "IBJMUC" } as const;
 
 describe("sendPassword — legacy first-access bridge", () => {
   let mockSearchUsers: any;
@@ -116,7 +122,7 @@ describe("sendPassword — legacy first-access bridge", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    const { headers } = await import("next/headers");
+    const { headers, cookies } = await import("next/headers");
     const { getServiceConfig } = await import("../service-url");
     const { getSessionCookieByLoginName } = await import("../cookies");
     const { getLoginSettings, listAuthenticationMethodTypes, searchUsers, getUserByID, getLockoutSettings } =
@@ -127,6 +133,8 @@ describe("sendPassword — legacy first-access bridge", () => {
     const { legacyMigratePassword, isLegacyMigrateEnabled } = await import("@/lib/server/legacy-migrate");
 
     vi.mocked(headers).mockResolvedValue({} as any);
+    vi.mocked(cookies).mockResolvedValue(cookieStore as any);
+    cookieStore.get.mockReturnValue(undefined);
     vi.mocked(getServiceConfig).mockReturnValue({ serviceConfig: { baseUrl: "https://api.example.com" } } as any);
     vi.mocked(getSessionCookieByLoginName).mockResolvedValue(null as any);
 
@@ -142,7 +150,7 @@ describe("sendPassword — legacy first-access bridge", () => {
     mockIsLegacyMigrateEnabled = vi.mocked(isLegacyMigrateEnabled);
 
     mockIsLegacyMigrateEnabled.mockReturnValue(true);
-    mockSearchUsers.mockResolvedValue({ result: [STALE_USER] });
+    mockSearchUsers.mockResolvedValue({ result: [USER] });
     mockGetLoginSettings.mockResolvedValue({
       allowLocalAuthentication: true,
       passwordCheckLifetime: { seconds: BigInt(86400) },
@@ -150,8 +158,7 @@ describe("sendPassword — legacy first-access bridge", () => {
     mockGetLockoutSettings.mockResolvedValue({ maxPasswordAttempts: BigInt(0) });
     mockCheckMFAFactors.mockResolvedValue(null);
     mockCompleteFlowOrGetUrl.mockResolvedValue({ redirect: "/apps" });
-    // getUserByID always returns the post-migration state
-    mockGetUserByID.mockResolvedValue({ user: FRESH_USER });
+    mockGetUserByID.mockResolvedValue({ user: USER });
   });
 
   const send = () =>
@@ -160,32 +167,55 @@ describe("sendPassword — legacy first-access bridge", () => {
       checks: create(ChecksSchema, { password: { password: "erp-password" } }) as any,
     });
 
+  const arrangeFirstAccess = () => {
+    mockCreateSessionAndUpdateCookie.mockRejectedValue(new Error("password not set"));
+    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mockLegacyMigratePassword.mockResolvedValue(VERIFIED);
+  };
+
   /**
-   * A user with no PASSWORD method whose first session attempt fails, then
-   * succeeds after the bridge. The forced-change screen MUST be reached: the
-   * pre-migration copy of the user still says passwordChangeRequired=false, so
-   * this only passes if the user is re-read after the retry.
+   * The ERP credential is proof of identity only: nothing is installed, so auth
+   * must NOT be retried — the user is sent to choose a password instead.
    */
-  test("reaches the forced password-change screen after a successful migration", async () => {
-    mockCreateSessionAndUpdateCookie
-      .mockRejectedValueOnce(new Error("password not set"))
-      .mockResolvedValueOnce({ session: SESSION, sessionCookie: { id: "new-session-id", token: "t" } });
-    // 1st call: the first-access check (no methods). 2nd: the MFA method listing.
-    mockListAuthenticationMethodTypes
-      .mockResolvedValueOnce({ authMethodTypes: [] })
-      .mockResolvedValue({ authMethodTypes: [AuthenticationMethodType.PASSWORD] });
-    mockLegacyMigratePassword.mockResolvedValue("migrated");
+  test("redirects to the choose-a-password screen after the ERP credential verifies", async () => {
+    arrangeFirstAccess();
 
     const result = await send();
 
     expect(mockLegacyMigratePassword).toHaveBeenCalledWith({ loginName: "testuser", password: "erp-password" });
-    // auth retried with the same password
-    expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalledTimes(2);
-    // the user was re-read, so passwordChangeRequired=true was seen
-    expect(mockGetUserByID).toHaveBeenCalledWith(expect.objectContaining({ userId: "user123" }));
-    expect(result).toEqual({ redirect: "/password/change?loginName=testuser" });
-    // the mandatory rotation is not suppressed — the flow stops here
+    expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalledTimes(1);
+    // Route-relative: next/navigation adds NEXT_PUBLIC_BASE_PATH on the client,
+    // so including it here would produce /ui/v2/login/ui/v2/login/... (seen live).
+    expect(result).toEqual({ redirect: "/password/first-access" });
     expect(mockCompleteFlowOrGetUrl).not.toHaveBeenCalled();
+  });
+
+  test("puts only an opaque httpOnly handle in the browser — never the reset code", async () => {
+    arrangeFirstAccess();
+
+    const result = await send();
+
+    expect(cookieStore.set).toHaveBeenCalledTimes(1);
+    const cookie = cookieStore.set.mock.calls[0][0];
+    expect(cookie.httpOnly).toBe(true);
+    expect(cookie.value).not.toContain("IBJMUC");
+    expect(JSON.stringify(result)).not.toContain("IBJMUC");
+  });
+
+  /**
+   * The ids only coincide for users the provisioner created. A mismatch means the
+   * reset code belongs to a different id, so spending it would fail anyway — and
+   * the typed credential was actually correct, so a password error would be a lie.
+   */
+  test("fails closed on an id mismatch instead of blaming the credential", async () => {
+    mockCreateSessionAndUpdateCookie.mockRejectedValue(new Error("password not set"));
+    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mockLegacyMigratePassword.mockResolvedValue({ ...VERIFIED, userId: "382641673429057539" });
+
+    const result = await send();
+
+    expect(result).toEqual({ error: "firstAccess.errors.integrity" });
+    expect(cookieStore.set).not.toHaveBeenCalled();
   });
 
   test("does not call the backend when the user already has a PASSWORD method", async () => {
@@ -212,29 +242,19 @@ describe("sendPassword — legacy first-access bridge", () => {
 
   // 409 / 403 / unavailable are indistinguishable to the user by design.
   test.each(["has_password", "not_verifiable", "unavailable"] as const)(
-    "returns the generic error and does not retry on %s",
+    "returns the generic error and starts no first-access flow on %s",
     async (outcome) => {
       mockCreateSessionAndUpdateCookie.mockRejectedValue(new Error("password not set"));
       mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
-      mockLegacyMigratePassword.mockResolvedValue(outcome);
+      mockLegacyMigratePassword.mockResolvedValue({ outcome });
 
       const result = await send();
 
       expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalledTimes(1);
+      expect(cookieStore.set).not.toHaveBeenCalled();
       expect(result).toEqual({ error: "errors.couldNotCreateSessionForUser" });
     },
   );
-
-  test("surfaces the generic error when the retry itself fails", async () => {
-    mockCreateSessionAndUpdateCookie.mockRejectedValue(new Error("still no good"));
-    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
-    mockLegacyMigratePassword.mockResolvedValue("migrated");
-
-    const result = await send();
-
-    expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ error: "errors.couldNotCreateSessionForUser" });
-  });
 
   test("never reaches the bridge when the first attempt succeeds", async () => {
     mockCreateSessionAndUpdateCookie.mockResolvedValue({
@@ -242,11 +262,161 @@ describe("sendPassword — legacy first-access bridge", () => {
       sessionCookie: { id: "new-session-id", token: "t" },
     });
     mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [AuthenticationMethodType.PASSWORD] });
-    mockGetUserByID.mockResolvedValue({ user: STALE_USER });
 
     const result = await send();
 
     expect(mockLegacyMigratePassword).not.toHaveBeenCalled();
     expect(result).toEqual({ redirect: "/apps" });
+  });
+});
+
+describe("completeFirstAccess", () => {
+  let mockSetUserPassword: any;
+  let mockCreateSessionAndUpdateCookie: any;
+  let mockSearchUsers: any;
+  let mockListAuthenticationMethodTypes: any;
+  let mockLegacyMigratePassword: any;
+
+  /** Runs a full first-access hand-off and returns the handle the cookie got. */
+  async function startFirstAccess(): Promise<string> {
+    mockCreateSessionAndUpdateCookie.mockRejectedValue(new Error("password not set"));
+    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mockLegacyMigratePassword.mockResolvedValue(VERIFIED);
+
+    await sendPassword({
+      loginName: "testuser",
+      checks: create(ChecksSchema, { password: { password: "erp-password" } }) as any,
+    });
+
+    const handle = cookieStore.set.mock.calls.at(-1)![0].value;
+    cookieStore.get.mockReturnValue({ value: handle });
+    return handle;
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+
+    const { headers, cookies } = await import("next/headers");
+    const { getServiceConfig } = await import("../service-url");
+    const { getSessionCookieByLoginName } = await import("../cookies");
+    const {
+      getLoginSettings,
+      listAuthenticationMethodTypes,
+      searchUsers,
+      getUserByID,
+      getLockoutSettings,
+      setUserPassword,
+    } = await import("../zitadel");
+    const { createSessionAndUpdateCookie } = await import("@/lib/server/cookie");
+    const { completeFlowOrGetUrl } = await import("../client");
+    const { checkMFAFactors } = await import("../verify-helper");
+    const { legacyMigratePassword, isLegacyMigrateEnabled } = await import("@/lib/server/legacy-migrate");
+
+    vi.mocked(headers).mockResolvedValue({} as any);
+    vi.mocked(cookies).mockResolvedValue(cookieStore as any);
+    cookieStore.get.mockReturnValue(undefined);
+    vi.mocked(getServiceConfig).mockReturnValue({ serviceConfig: { baseUrl: "https://api.example.com" } } as any);
+    vi.mocked(getSessionCookieByLoginName).mockResolvedValue(null as any);
+    vi.mocked(isLegacyMigrateEnabled).mockReturnValue(true);
+
+    mockSetUserPassword = vi.mocked(setUserPassword);
+    mockCreateSessionAndUpdateCookie = vi.mocked(createSessionAndUpdateCookie);
+    mockSearchUsers = vi.mocked(searchUsers);
+    mockListAuthenticationMethodTypes = vi.mocked(listAuthenticationMethodTypes);
+    mockLegacyMigratePassword = vi.mocked(legacyMigratePassword);
+
+    mockSearchUsers.mockResolvedValue({ result: [USER] });
+    vi.mocked(getLoginSettings).mockResolvedValue({
+      allowLocalAuthentication: true,
+      passwordCheckLifetime: { seconds: BigInt(86400) },
+    } as any);
+    vi.mocked(getLockoutSettings).mockResolvedValue({ maxPasswordAttempts: BigInt(0) } as any);
+    vi.mocked(checkMFAFactors).mockResolvedValue(null as any);
+    vi.mocked(completeFlowOrGetUrl).mockResolvedValue({ redirect: "/apps" } as any);
+    vi.mocked(getUserByID).mockResolvedValue({ user: USER } as any);
+    mockSetUserPassword.mockResolvedValue({});
+  });
+
+  test("rejects when there is no ticket for the handle", async () => {
+    const result = await completeFirstAccess({ password: "Compliant1!" });
+
+    expect(mockSetUserPassword).not.toHaveBeenCalled();
+    expect(result).toEqual({ error: "firstAccess.errors.expired" });
+  });
+
+  test("spends the reset code against the resolved Zitadel user id", async () => {
+    await startFirstAccess();
+
+    await completeFirstAccess({ password: "Compliant1!" });
+
+    expect(mockSetUserPassword).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user123", password: "Compliant1!", code: "IBJMUC" }),
+    );
+  });
+
+  test("signs the user in with the new password and clears the handle", async () => {
+    await startFirstAccess();
+    mockCreateSessionAndUpdateCookie.mockReset();
+    mockCreateSessionAndUpdateCookie.mockResolvedValue({
+      session: SESSION,
+      sessionCookie: { id: "new-session-id", token: "t" },
+    });
+    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [AuthenticationMethodType.PASSWORD] });
+
+    const result = await completeFirstAccess({ password: "Compliant1!" });
+
+    expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalledWith(
+      expect.objectContaining({ checks: expect.objectContaining({ password: { password: "Compliant1!" } }) }),
+    );
+    expect(cookieStore.delete).toHaveBeenCalledWith("first_access");
+    expect(result).toEqual({ redirect: "/apps" });
+  });
+
+  test("surfaces Zitadel's complexity message and keeps the ticket usable for a retry", async () => {
+    await startFirstAccess();
+    mockSetUserPassword.mockRejectedValueOnce(
+      Object.assign(new Error("A senha deve conter letras minusculas"), { code: 3, name: "ConnectError" }),
+    );
+
+    const rejected = await completeFirstAccess({ password: "NOLOWERCASE1!" });
+    expect(rejected).toEqual({ error: "A senha deve conter letras minusculas" });
+
+    // same ticket, corrected password
+    mockSetUserPassword.mockResolvedValue({});
+    await completeFirstAccess({ password: "Compliant1!" });
+    expect(mockSetUserPassword).toHaveBeenLastCalledWith(expect.objectContaining({ code: "IBJMUC" }));
+  });
+
+  // A successful set consumes the reset code backend-side; reusing it would fail
+  // with "Codigo nao encontrado", so the ticket must not survive the success.
+  test("does not let the reset code be spent twice", async () => {
+    await startFirstAccess();
+    mockCreateSessionAndUpdateCookie.mockReset();
+    mockCreateSessionAndUpdateCookie.mockResolvedValue({
+      session: SESSION,
+      sessionCookie: { id: "new-session-id", token: "t" },
+    });
+    mockListAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [AuthenticationMethodType.PASSWORD] });
+
+    await completeFirstAccess({ password: "Compliant1!" });
+    mockSetUserPassword.mockClear();
+
+    const second = await completeFirstAccess({ password: "Another1!" });
+    expect(second).toEqual({ error: "firstAccess.errors.expired" });
+    expect(mockSetUserPassword).not.toHaveBeenCalled();
+  });
+
+  test("stops accepting attempts after the retry budget is spent", async () => {
+    await startFirstAccess();
+    mockSetUserPassword.mockRejectedValue(Object.assign(new Error("nope"), { code: 3, name: "ConnectError" }));
+
+    for (let i = 0; i < 5; i++) {
+      await completeFirstAccess({ password: "bad" });
+    }
+
+    const result = await completeFirstAccess({ password: "Compliant1!" });
+    expect(result).toEqual({ error: "firstAccess.errors.expired" });
+    expect(mockSetUserPassword).toHaveBeenCalledTimes(5);
   });
 });
