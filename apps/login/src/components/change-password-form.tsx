@@ -123,7 +123,7 @@ export function ChangePasswordForm({ passwordComplexitySettings, sessionId, logi
   return (
     <>
       {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
-      <form className="w-full">
+      <form className="w-full" onSubmit={handleSubmit(submitChange)}>
         <div className="mb-4 grid grid-cols-1 gap-4 pt-4">
           <div className="">
             <TextInput
@@ -183,7 +183,6 @@ export function ChangePasswordForm({ passwordComplexitySettings, sessionId, logi
             type="submit"
             variant={ButtonVariants.Primary}
             disabled={loading || !policyIsValid || !formState.isValid || watchPassword !== watchConfirmPassword}
-            onClick={handleSubmit(submitChange)}
             data-testid="submit-button"
           >
             {loading && <Spinner className="mr-2 h-5 w-5" />} <Translated i18nKey="change.submit" namespace="password" />

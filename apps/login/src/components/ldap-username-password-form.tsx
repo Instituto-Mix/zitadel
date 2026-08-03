@@ -82,7 +82,7 @@ export function LDAPUsernamePasswordForm({
   }
 
   return (
-    <form className="w-full space-y-4">
+    <form className="w-full space-y-4" onSubmit={handleSubmit(submitUsernamePassword)}>
       <TextInput
         type="text"
         autoComplete="username"
@@ -119,7 +119,6 @@ export function LDAPUsernamePasswordForm({
           className="self-end"
           variant={ButtonVariants.Primary}
           disabled={loading || !formState.isValid}
-          onClick={handleSubmit(submitUsernamePassword)}
           data-testid="submit-button"
         >
           {loading && <Spinner className="mr-2 h-5 w-5" />}

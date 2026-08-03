@@ -111,7 +111,7 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
   return (
     <>
       {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
-      <form className="w-full">
+      <form className="w-full" onSubmit={handleSubmit(submitPassword)}>
         <div className={`${error && "animate-shake transform-gpu"}`}>
           <TextInput
             type="password"
@@ -156,7 +156,6 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
             className="self-end"
             variant={ButtonVariants.Primary}
             disabled={loading || !formState.isValid}
-            onClick={handleSubmit(submitPassword)}
             data-testid="submit-button"
           >
             {loading && <Spinner className="mr-2 h-5 w-5" />} <Translated i18nKey="verify.submit" namespace="password" />
