@@ -140,7 +140,7 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
 | `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password — see above). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
-| `AUTH_BACKEND_TOKEN` | for Track B | PAT of the dedicated `login-page` machine user (`382641673429057539`), checked by the backend's `require_zitadel_service_account` guard on **both** endpoints — so that account must be authorized for both. Sent as `x-zitadel-service-account`. Bearer secret: server-side only, never logged. |
+| `AUTH_BACKEND_TOKEN` | for Track B | The backend's `RESOLVE_ALLOWED_SERVICE_ACCOUNT` shared secret (64 chars), sent as `x-zitadel-service-account` and checked by the `require_zitadel_service_account` guard on **both** endpoints. It is a **plain string compare, not a Zitadel identity check** — sending the `login-page` machine user's PAT (277 chars) instead makes the guard reject every call with a uniform `403` before any credential is looked at, which surfaces as "user not found" for a legacy identifier and "wrong password" for a first access. Bearer secret: server-side only, never logged. |
 | `EMAIL_VERIFICATION` | no | `true`/`false`. Gates login on verifying a real unverified address, so it needs working SMTP. The undeliverable `invalido.troque` placeholder is exempt either way. |
 | `OTEL_SDK_DISABLED` | no | `true` unless you run an OpenTelemetry collector. |
 | `CSP_FETCH_ENABLED` | no | `false` to skip fetching iframe origins from Zitadel for CSP. |
@@ -148,6 +148,28 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 The public domain is resolved at runtime from the `Host` / `X-Forwarded-Host` header
 that Dokploy's reverse proxy sets — no domain env var is needed at runtime (only the
 build-time `SERVER_ACTION_ALLOWED_ORIGINS` above).
+
+### With Track B enabled, run the login app single-instance (or with session affinity)
+
+First access is two requests: the one that verifies the ERP password and the one that
+sets the new password. The reset code that authorizes the second must not reach the
+browser, so it is held **in memory** in the app process (`src/lib/server/first-access-ticket.ts`)
+and the browser gets only an opaque handle in the httpOnly `first_access` cookie. That
+memory is per-process, so:
+
+- **More than one replica without session affinity breaks first access.** If the second
+  request lands on a replica that never saw the ticket, the user is told
+  `Esta sessão de primeiro acesso expirou. Entre novamente para recomeçar.` even though
+  nothing expired and their ERP password was correct. Scale to one instance, or configure
+  sticky sessions on the proxy, for as long as `AUTH_BACKEND_URL` is set.
+- **A restart or redeploy drops in-flight tickets.** That is the intended failure mode:
+  the user retypes their ERP password and gets a fresh code.
+
+The same per-process boundary exists *inside* the app: a Next.js route handler gets a
+different module instance from the RSC/server-action layer, so a ticket written from a
+route handler is invisible to the page that reads it. Keep every first-access read and
+write in server actions and server components (measured: route handler saw the ticket
+while the page saw none for the same cookie).
 
 ---
 

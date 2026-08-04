@@ -10,8 +10,11 @@ const logger = createLogger("legacy-migrate");
  * Credentials for the call below. The whole auth concern for the bridge lives
  * here and nowhere else.
  *
- * AUTH_BACKEND_TOKEN must hold the PAT of the dedicated `login-page` Zitadel
- * machine user (382641673429057539) — not an ad hoc value. It is sent as
+ * AUTH_BACKEND_TOKEN must hold the backend's RESOLVE_ALLOWED_SERVICE_ACCOUNT
+ * shared secret (64 chars) — NOT the `login-page` machine user's Zitadel PAT.
+ * The backend's guard is a plain string compare, not a Zitadel identity check,
+ * so a PAT there rejects every call with a uniform 403 before any credential is
+ * looked at. It is sent as
  * `x-zitadel-service-account` and must be treated as a bearer secret: env var
  * only, server-side only, never logged, never surfaced in an error message, and
  * never given a NEXT_PUBLIC_ name (which would put it in the client bundle).
