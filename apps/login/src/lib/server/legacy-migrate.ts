@@ -1,27 +1,10 @@
-// This module holds a bearer secret. `server-only` makes an accidental import
-// from a client component a build error rather than a leak.
 import "server-only";
+
+import { getAuthBackendAccessToken } from "./auth-backend-token";
 
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("legacy-migrate");
-
-/**
- * Credentials for the call below. The whole auth concern for the bridge lives
- * here and nowhere else.
- *
- * AUTH_BACKEND_TOKEN must hold the backend's RESOLVE_ALLOWED_SERVICE_ACCOUNT
- * shared secret (64 chars) — NOT the `login-page` machine user's Zitadel PAT.
- * The backend's guard is a plain string compare, not a Zitadel identity check,
- * so a PAT there rejects every call with a uniform 403 before any credential is
- * looked at. It is sent as
- * `x-zitadel-service-account` and must be treated as a bearer secret: env var
- * only, server-side only, never logged, never surfaced in an error message, and
- * never given a NEXT_PUBLIC_ name (which would put it in the client bundle).
- */
-function getServiceAccountToken(): string | undefined {
-  return process.env.AUTH_BACKEND_TOKEN;
-}
 
 /**
  * First-access bridge from the legacy ERP credential (Track B).
@@ -84,9 +67,8 @@ export async function legacyMigratePassword({
     return { outcome: "unavailable" };
   }
 
-  const token = getServiceAccountToken();
+  const token = await getAuthBackendAccessToken();
   if (!token) {
-    logger.warn("service account token not set, skipping legacy-migrate");
     return { outcome: "unavailable" };
   }
 
@@ -100,9 +82,7 @@ export async function legacyMigratePassword({
     const response = await fetch(`${backendUrl.replace(/\/$/, "")}/auth/legacy-migrate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        // The backend guard checks this exact header (not Authorization: Bearer).
-        "x-zitadel-service-account": token,
+        Authorization: `Bearer ${token}`,
         // Bypass the ngrok free-tier browser interstitial for API calls.
         "ngrok-skip-browser-warning": "1",
       },
@@ -143,5 +123,10 @@ export async function legacyMigratePassword({
 
 /** True when the legacy first-access bridge is configured for this deployment. */
 export function isLegacyMigrateEnabled(): boolean {
-  return !!process.env.AUTH_BACKEND_URL && !!getServiceAccountToken();
+  return !!(
+    process.env.AUTH_BACKEND_URL &&
+    process.env.AUTH_BACKEND_CLIENT_ID &&
+    process.env.AUTH_BACKEND_CLIENT_SECRET &&
+    process.env.AUTH_BACKEND_AUDIENCE
+  );
 }

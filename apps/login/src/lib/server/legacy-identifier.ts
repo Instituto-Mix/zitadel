@@ -1,3 +1,5 @@
+import { getAuthBackendAccessToken } from "./auth-backend-token";
+
 import { createLogger } from "@/lib/logger";
 
 const logger = createLogger("legacy-identifier");
@@ -45,10 +47,7 @@ export function detectCredentialType(value: string): CredentialType {
  * (The backend returns 403 — i.e. null here — for inactive/unresolvable, so a
  * 200 hit is always usable.)
  */
-export function substituteLoginName(
-  typedValue: string,
-  resolved: ResolveResponse | null,
-): string {
+export function substituteLoginName(typedValue: string, resolved: ResolveResponse | null): string {
   if (resolved && resolved.login_name) {
     return resolved.login_name;
   }
@@ -60,18 +59,10 @@ export function substituteLoginName(
  * a miss (403), any error, or when AUTH_BACKEND_URL is not configured — the
  * caller falls through unchanged (fail-open). The typed value is never logged.
  */
-export async function resolveLegacyIdentifier(
-  typedValue: string,
-): Promise<ResolveResponse | null> {
+export async function resolveLegacyIdentifier(typedValue: string): Promise<ResolveResponse | null> {
   const backendUrl = process.env.AUTH_BACKEND_URL;
   if (!backendUrl) {
     logger.debug("AUTH_BACKEND_URL not set, skipping legacy-identifier resolve");
-    return null;
-  }
-
-  const token = process.env.AUTH_BACKEND_TOKEN;
-  if (!token) {
-    logger.warn("AUTH_BACKEND_TOKEN not set, skipping legacy-identifier resolve");
     return null;
   }
 
@@ -81,28 +72,30 @@ export async function resolveLegacyIdentifier(
     return null;
   }
 
+  const token = await getAuthBackendAccessToken();
+  if (!token) {
+    return null;
+  }
+
   const credentialType = detectCredentialType(typedValue);
 
   try {
     // AUTH_BACKEND_URL already includes the API version prefix (e.g. .../v1),
     // so the path here is just /auth/resolve.
-    const response = await fetch(
-      `${backendUrl.replace(/\/$/, "")}/auth/resolve`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // The backend validates the configured resolver M2M client from this token.
-          Authorization: `Bearer ${token}`,
-          // Bypass the ngrok free-tier browser interstitial for API calls.
-          "ngrok-skip-browser-warning": "1",
-        },
-        body: JSON.stringify({
-          credential_type: credentialType,
-          value: typedValue,
-        }),
+    const response = await fetch(`${backendUrl.replace(/\/$/, "")}/auth/resolve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // The backend validates the configured resolver M2M client from this token.
+        Authorization: `Bearer ${token}`,
+        // Bypass the ngrok free-tier browser interstitial for API calls.
+        "ngrok-skip-browser-warning": "1",
       },
-    );
+      body: JSON.stringify({
+        credential_type: credentialType,
+        value: typedValue,
+      }),
+    });
 
     // 403 = miss/inactive. Any non-2xx falls through (fail-open).
     if (!response.ok) {
