@@ -92,8 +92,8 @@ export async function resolveLegacyIdentifier(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // The backend guard checks this exact header (not Authorization: Bearer).
-          "x-zitadel-service-account": token,
+          // The backend validates the configured resolver M2M client from this token.
+          Authorization: `Bearer ${token}`,
           // Bypass the ngrok free-tier browser interstitial for API calls.
           "ngrok-skip-browser-warning": "1",
         },

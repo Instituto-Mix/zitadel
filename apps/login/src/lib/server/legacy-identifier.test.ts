@@ -96,10 +96,10 @@ describe("resolveLegacyIdentifier", () => {
     // AUTH_BACKEND_URL already includes /v1; trailing slash is normalized.
     expect(url).toBe("https://backend.example.com/auth/resolve");
     expect(init?.headers).toMatchObject({
-      "x-zitadel-service-account": "secret-token",
+      Authorization: "Bearer secret-token",
       "ngrok-skip-browser-warning": "1",
     });
-    expect(init?.headers).not.toHaveProperty("Authorization");
+    expect(init?.headers).not.toHaveProperty("x-zitadel-service-account");
     expect(JSON.parse(init?.body as string)).toEqual({
       credential_type: "tax_id",
       value: "12345678901",
