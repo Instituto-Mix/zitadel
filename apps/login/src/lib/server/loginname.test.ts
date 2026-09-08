@@ -213,7 +213,9 @@ describe("sendLoginname", () => {
 
       beforeEach(() => {
         process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1";
-        process.env.AUTH_BACKEND_TOKEN = "token-123";
+        process.env.AUTH_BACKEND_CLIENT_ID = "resolver-client";
+        process.env.AUTH_BACKEND_CLIENT_SECRET = "resolver-secret";
+        process.env.AUTH_BACKEND_AUDIENCE = "urn:zitadel:iam:org:project:id:123:aud";
         // the identifier resolver is a separate concern here; fail it open
         vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("not under test")));
       });

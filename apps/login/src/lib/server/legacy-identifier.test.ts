@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  detectCredentialType,
-  resolveLegacyIdentifier,
-  ResolveResponse,
-  substituteLoginName,
-} from "./legacy-identifier";
+import { detectCredentialType, type ResolveResponse, substituteLoginName } from "./legacy-identifier";
+
+// Reload per test to isolate the server-side token cache.
+async function resolveLegacyIdentifier(typedValue: string) {
+  const module = await import("./legacy-identifier");
+  return module.resolveLegacyIdentifier(typedValue);
+}
 
 describe("detectCredentialType", () => {
   it("treats exactly 11 digits as a tax number", () => {
@@ -45,9 +46,7 @@ describe("substituteLoginName", () => {
   });
 
   it("passes through when login_name is missing", () => {
-    expect(
-      substituteLoginName("A0000", { ...hit, login_name: "" }),
-    ).toBe("A0000");
+    expect(substituteLoginName("A0000", { ...hit, login_name: "" })).toBe("A0000");
   });
 });
 
@@ -56,7 +55,11 @@ describe("resolveLegacyIdentifier", () => {
 
   beforeEach(() => {
     process.env.AUTH_BACKEND_URL = "https://backend.example.com/";
-    process.env.AUTH_BACKEND_TOKEN = "secret-token";
+    process.env.ZITADEL_API_URL = "https://id.example.com/";
+    process.env.AUTH_BACKEND_CLIENT_ID = "resolver-client";
+    process.env.AUTH_BACKEND_CLIENT_SECRET = "resolver-secret";
+    process.env.AUTH_BACKEND_AUDIENCE = "urn:zitadel:iam:org:project:id:123:aud";
+    vi.resetModules();
   });
 
   afterEach(() => {
@@ -71,8 +74,8 @@ describe("resolveLegacyIdentifier", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("returns null when AUTH_BACKEND_TOKEN is not set", async () => {
-    delete process.env.AUTH_BACKEND_TOKEN;
+  it("returns null when resolver client configuration is absent", async () => {
+    delete process.env.AUTH_BACKEND_CLIENT_SECRET;
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     expect(await resolveLegacyIdentifier("A0000")).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -84,19 +87,24 @@ describe("resolveLegacyIdentifier", () => {
       login_name: "canonical@example.com",
       active: true,
     };
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(body), { status: 200 }),
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600 }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 200 }));
 
     const result = await resolveLegacyIdentifier("12345678901");
 
     expect(result).toEqual(body);
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    const [url, init] = fetchSpy.mock.calls[0];
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchSpy.mock.calls[1];
     // AUTH_BACKEND_URL already includes /v1; trailing slash is normalized.
     expect(url).toBe("https://backend.example.com/auth/resolve");
     expect(init?.headers).toMatchObject({
-      Authorization: "Bearer secret-token",
+      Authorization: "Bearer access-token",
       "ngrok-skip-browser-warning": "1",
     });
     expect(init?.headers).not.toHaveProperty("x-zitadel-service-account");
@@ -113,12 +121,24 @@ describe("resolveLegacyIdentifier", () => {
   });
 
   it("returns null on a 403 miss", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 403 }));
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600 }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
     expect(await resolveLegacyIdentifier("A0000")).toBeNull();
   });
 
-  it("returns null (fail-open) when fetch throws", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+  it("returns null (fail-open) when the resolver request throws", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "access-token", expires_in: 3600 }), {
+          status: 200,
+        }),
+      )
+      .mockRejectedValueOnce(new Error("network down"));
     expect(await resolveLegacyIdentifier("A0000")).toBeNull();
   });
 });
