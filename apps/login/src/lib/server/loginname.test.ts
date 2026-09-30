@@ -529,8 +529,8 @@ describe("sendLoginname", () => {
           loginName: "user@example.com",
         });
 
-        expect(result).toBeDefined();
-        expect(result?.redirect).toMatch(/^\/password\?/);
+        const redirect = result && "redirect" in result ? result.redirect : undefined;
+        expect(redirect).toMatch(/^\/password\?/);
       });
 
       test("should return error when password is only method in multi-method scenario but not allowed", async () => {
@@ -587,11 +587,11 @@ describe("sendLoginname", () => {
         requestId: "req123",
       });
 
-      expect(result).toBeDefined();
-      expect(result?.redirect).toMatch(/^\/register\?/);
-      expect(result?.redirect).toContain("organization=org123");
-      expect(result?.redirect).toContain("requestId=req123");
-      expect(result?.redirect).toContain("email=user%40example.com");
+      const redirect = result && "redirect" in result ? result.redirect : undefined;
+      expect(redirect).toMatch(/^\/register\?/);
+      expect(redirect).toContain("organization=org123");
+      expect(redirect).toContain("requestId=req123");
+      expect(redirect).toContain("email=user%40example.com");
     });
 
     test("should redirect to password when ignoreUnknownUsernames is true", async () => {
@@ -607,11 +607,11 @@ describe("sendLoginname", () => {
         ignoreUnknownUsernames: true,
       });
 
-      expect(result).toBeDefined();
-      expect(result?.redirect).toMatch(/^\/password\?/);
-      expect(result?.redirect).toContain("loginName=user%40example.com");
-      expect(result?.redirect).toContain("requestId=req123");
-      expect(result?.redirect).toContain("organization=org123");
+      const redirect = result && "redirect" in result ? result.redirect : undefined;
+      expect(redirect).toMatch(/^\/password\?/);
+      expect(redirect).toContain("loginName=user%40example.com");
+      expect(redirect).toContain("requestId=req123");
+      expect(redirect).toContain("organization=org123");
     });
 
     test("should return error when user not found and no registration allowed", async () => {
@@ -802,11 +802,11 @@ describe("sendLoginname", () => {
         // No organization parameter - this is the key test scenario
       });
 
-      expect(result).toBeDefined();
-      expect(result?.redirect).toMatch(/^\/register\?/);
-      expect(result?.redirect).toContain("organization=discovered-org-123");
-      expect(result?.redirect).toContain("requestId=req123");
-      expect(result?.redirect).toContain("email=user%40example.com");
+      const redirect = result && "redirect" in result ? result.redirect : undefined;
+      expect(redirect).toMatch(/^\/register\?/);
+      expect(redirect).toContain("organization=discovered-org-123");
+      expect(redirect).toContain("requestId=req123");
+      expect(redirect).toContain("email=user%40example.com");
 
       // Verify org discovery was called with correct domain
       expect(mockGetOrgsByDomain).toHaveBeenCalledWith({
@@ -922,9 +922,9 @@ describe("sendLoginname", () => {
         requestId: "req123",
       });
 
-      expect(result).toBeDefined();
-      expect(result?.redirect).toMatch(/^\/register\?/);
-      expect(result?.redirect).toContain("organization=123456");
+      const redirect = result && "redirect" in result ? result.redirect : undefined;
+      expect(redirect).toMatch(/^\/register\?/);
+      expect(redirect).toContain("organization=123456");
 
       // Verify org discovery was NOT called since org was provided
       expect(mockGetOrgsByDomain).not.toHaveBeenCalled();
@@ -1267,9 +1267,9 @@ describe("sendLoginname", () => {
         requestId: "req123",
       });
 
-      expect(result).toBeDefined();
-      expect(result?.redirect).toContain("organization=custom-org");
-      expect(result?.redirect).toContain("requestId=req123");
+      const redirect = result && "redirect" in result ? result.redirect : undefined;
+      expect(redirect).toContain("organization=custom-org");
+      expect(redirect).toContain("requestId=req123");
     });
 
     test("should redirect to password with INPUT loginName when ignoreUnknownUsernames is true, even if user preferredLoginName is different", async () => {

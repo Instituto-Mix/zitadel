@@ -38,6 +38,25 @@ The **Login App** (`apps/login`) provides the user interface for authentication 
   portion of `packages/AGENTS.md` or `proto/AGENTS.md`; those paths remain
   read-only under the hard project boundary above.
 
+## Dependency hygiene
+- Before shipping Login v2 changes, check direct dependencies with
+  `pnpm --filter @zitadel/login outdated --format json` from the repository
+  root and run `pnpm audit --json` from `apps/login/`. These commands can exit
+  nonzero when they find outdated packages or advisories; inspect their output.
+- The audit checks the workspace lockfile, not just Login v2. Distinguish
+  advisory paths beginning `apps__login>` from unrelated workspace projects.
+  Prioritize patched releases for Login v2 security advisories, then verify
+  build and tests. Use pnpm, not `npm audit` or `npm install`, for this workspace.
+- Updating dependencies requires the root `pnpm-lock.yaml`; the hard project
+  boundary above still applies. Request explicit authorization before changing
+  that file, and never leave `apps/login/package.json` out of sync with it.
+- To verify Login without generating files in shared projects, run
+  `pnpm run build` and `pnpm run test-unit` from `apps/login/`. Nx targets below
+  can invoke shared proto/client prerequisites; honor the hard boundary.
+- Keep Login's protobuf runtime compatible with the unchanged shared client/proto
+  packages. A newer peer resolution can produce incompatible RPC descriptor types;
+  do not update shared packages to bypass this project's boundary.
+
 ## Verified Nx Targets
 - **Dev Server**: `pnpm nx run @zitadel/login:dev`
 - **Build**: `pnpm nx run @zitadel/login:build`
@@ -46,3 +65,13 @@ The **Login App** (`apps/login`) provides the user interface for authentication 
 - **Test (unit)**: `pnpm nx run @zitadel/login:test-unit`
 - **Test (integration)**: `pnpm nx run @zitadel/login:test-integration`
 - **Pack (Docker)**: `pnpm nx run @zitadel/login:pack` — builds a local Docker image `zitadel/zitadel-login:local`. Requires Docker daemon.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

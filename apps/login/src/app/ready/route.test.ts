@@ -20,7 +20,7 @@ describe("GET /ready", () => {
 
   afterEach(() => {
     if (savedApiUrl === undefined) {
-      delete process.env.ZITADEL_API_URL;
+      Reflect.deleteProperty(process.env, "ZITADEL_API_URL");
     } else {
       process.env.ZITADEL_API_URL = savedApiUrl;
     }
@@ -62,7 +62,7 @@ describe("GET /ready", () => {
   });
 
   test("should return 503 when ZITADEL_API_URL is not set", async () => {
-    delete process.env.ZITADEL_API_URL;
+    Reflect.deleteProperty(process.env, "ZITADEL_API_URL");
 
     const response = await GET();
 

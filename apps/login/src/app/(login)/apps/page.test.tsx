@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import Page from "./page";
 
@@ -120,6 +120,18 @@ describe("Applications page credential links", () => {
     expect(screen.getByRole("link", { name: "Logout" })).toHaveAttribute("href", "/logout");
   });
 
+  test("shows Email with credential setup actions instead of in footer navigation", async () => {
+    await renderApplicationsPage();
+
+    const accountSecurity = screen.getByRole("region", { name: "Account security" });
+    expect(within(accountSecurity).getByRole("link", { name: "Email" })).toHaveAttribute("href", "/email");
+    expect(within(accountSecurity).getByRole("link", { name: "Set up passkey" })).toBeInTheDocument();
+    expect(within(accountSecurity).getByRole("link", { name: "Set up authenticator (OTP)" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Email" })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/accounts");
+    expect(screen.getByRole("link", { name: "Logout" })).toHaveAttribute("href", "/logout");
+  });
+
   test("omits credential setup links when the session lacks its canonical organization", async () => {
     mocks.loadMostRecentSession.mockResolvedValue({
       factors: { user: { ...authenticatedSession.factors.user, organizationId: undefined } },
@@ -129,6 +141,7 @@ describe("Applications page credential links", () => {
 
     expect(screen.queryByRole("link", { name: "Set up passkey" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Set up authenticator (OTP)" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute("href", "/email");
   });
 
   test("redirects to login when there is no authenticated session user", async () => {

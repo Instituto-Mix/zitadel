@@ -159,24 +159,38 @@ export default async function Page(props: { searchParams: Promise<Record<string,
           </div>
         ))}
 
-        {credentialSetupParams && (
-          <section className="flex flex-col space-y-2" aria-label="Account security">
-            <Link
-              href={`/passkey/set?${credentialSetupParams}`}
-              className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-            >
-              <Translated i18nKey="setUpPasskey" namespace="apps" />
-            </Link>
-            <Link
-              href={`/authenticator/set?${credentialSetupParams}`}
-              className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-            >
-              <Translated i18nKey="setUpAuthenticatorOtp" namespace="apps" />
-            </Link>
-          </section>
-        )}
+        <section className="flex flex-col space-y-2" aria-label="Account security">
+          {credentialSetupParams && (
+            <>
+              <Link
+                href={`/passkey/set?${credentialSetupParams}`}
+                className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <Translated i18nKey="setUpPasskey" namespace="apps" />
+              </Link>
+              <Link
+                href={`/authenticator/set?${credentialSetupParams}`}
+                className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <Translated i18nKey="setUpAuthenticatorOtp" namespace="apps" />
+              </Link>
+            </>
+          )}
+          <Link
+            href="/email"
+            className="border-divider-light dark:border-divider-dark relative flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+          >
+            {emailPending && (
+              <span
+                aria-hidden
+                className="ring-background-light-400 dark:ring-background-dark-500 absolute -top-1 -right-1 z-10 h-2.5 w-2.5 rounded-full bg-yellow-400 ring-2"
+              />
+            )}
+            <Translated i18nKey="title" namespace="email" />
+          </Link>
+        </section>
 
-        <NavLinks current="apps" emailPending={emailPending} />
+        <NavLinks current="apps" emailPending={emailPending} hideEmail />
       </div>
     </DynamicTheme>
   );

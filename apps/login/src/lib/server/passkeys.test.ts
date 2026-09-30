@@ -1,4 +1,21 @@
-import { timestampDate } from "@zitadel/client";
+import type * as ZitadelClient from "@zitadel/client";
+import { create, timestampDate, TimestampSchema } from "@zitadel/client";
+import {
+  FactorsSchema,
+  PasswordFactorSchema,
+  SessionSchema,
+  UserFactorSchema,
+  WebAuthNFactorSchema,
+} from "@zitadel/proto/zitadel/session/v2/session_pb";
+import { GetSessionResponseSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
+import { PasskeyRegistrationCodeSchema } from "@zitadel/proto/zitadel/user/v2/auth_pb";
+import { UserSchema } from "@zitadel/proto/zitadel/user/v2/user_pb";
+import {
+  CreatePasskeyRegistrationLinkResponseSchema,
+  GetUserByIDResponseSchema,
+  ListAuthenticationMethodTypesResponseSchema,
+  RegisterPasskeyResponseSchema,
+} from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { headers } from "next/headers";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
@@ -21,12 +38,15 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(),
 }));
 
-vi.mock("@zitadel/client", () => ({
-  create: vi.fn(),
-  Duration: vi.fn(),
-  Timestamp: vi.fn(),
-  timestampDate: vi.fn(),
-}));
+vi.mock("@zitadel/client", async () => {
+  const actual = await vi.importActual<typeof ZitadelClient>("@zitadel/client");
+  return {
+    ...actual,
+    Duration: vi.fn(),
+    Timestamp: vi.fn(),
+    timestampDate: vi.fn(),
+  };
+});
 
 vi.mock("../service-url", () => ({
   getServiceConfig: vi.fn(),
@@ -737,6 +757,15 @@ describe("registerPasskeyLink", () => {
   });
 });
 
+const sessionCookie = {
+  id: "session-123",
+  token: "session-token",
+  loginName: "max@zitadel.com",
+  creationTs: "",
+  expirationTs: "",
+  changeTs: "",
+};
+
 describe("verifyPasskeyRegistration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -751,26 +780,26 @@ describe("verifyPasskeyRegistration", () => {
 
   test("does not create a passkey from WebAuthn verification without user verification", async () => {
     vi.mocked(isSessionValid).mockResolvedValue(true);
-    vi.mocked(getSessionCookieById).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
-    vi.mocked(getSession).mockResolvedValue({
-      session: {
-        id: "session-123",
-        factors: {
-          user: { id: "user-123", loginName: "max@zitadel.com" },
-          webAuthN: {
-            verifiedAt: { seconds: BigInt(1700000000), nanos: 0 },
-            userVerified: false,
-          },
-        },
-      },
-    });
-    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue({
-      code: { id: "code-id", code: "code-value" },
-    });
+    vi.mocked(getSessionCookieById).mockResolvedValue(sessionCookie);
+    vi.mocked(getSession).mockResolvedValue(
+      create(GetSessionResponseSchema, {
+        session: create(SessionSchema, {
+          id: "session-123",
+          factors: create(FactorsSchema, {
+            user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+            webAuthN: create(WebAuthNFactorSchema, {
+              verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+              userVerified: false,
+            }),
+          }),
+        }),
+      }),
+    );
+    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue(
+      create(CreatePasskeyRegistrationLinkResponseSchema, {
+        code: create(PasskeyRegistrationCodeSchema, { id: "code-id", code: "code-value" }),
+      }),
+    );
 
     const result = await registerPasskeyLink({ sessionId: "session-123" });
 
@@ -780,39 +809,47 @@ describe("verifyPasskeyRegistration", () => {
   });
 
   test("rejects final verification when the session expired after challenge creation", async () => {
-    vi.mocked(getSessionCookieById).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
+    vi.mocked(getSessionCookieById).mockResolvedValue(sessionCookie);
     vi.mocked(isSessionValid).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     vi.mocked(getSession)
-      .mockResolvedValueOnce({
-        session: {
-          id: "session-123",
-          factors: {
-            user: { id: "user-123", loginName: "max@zitadel.com" },
-            password: { verifiedAt: { seconds: BigInt(1700000000), nanos: 0 } },
-          },
-        },
-      })
-      .mockResolvedValueOnce({
-        session: {
-          id: "session-123",
-          expirationDate: { seconds: BigInt(1), nanos: 0 },
-          factors: {
-            user: { id: "user-123", loginName: "max@zitadel.com" },
-            password: { verifiedAt: { seconds: BigInt(1700000000), nanos: 0 } },
-          },
-        },
-      });
-    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue({
-      code: { id: "code-id", code: "code-value" },
-    });
-    vi.mocked(registerPasskey).mockResolvedValue({
-      passkeyId: "passkey-123",
-      publicKeyCredentialCreationOptions: {},
-    });
+      .mockResolvedValueOnce(
+        create(GetSessionResponseSchema, {
+          session: create(SessionSchema, {
+            id: "session-123",
+            factors: create(FactorsSchema, {
+              user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+              password: create(PasswordFactorSchema, {
+                verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+              }),
+            }),
+          }),
+        }),
+      )
+      .mockResolvedValueOnce(
+        create(GetSessionResponseSchema, {
+          session: create(SessionSchema, {
+            id: "session-123",
+            expirationDate: create(TimestampSchema, { seconds: BigInt(1), nanos: 0 }),
+            factors: create(FactorsSchema, {
+              user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+              password: create(PasswordFactorSchema, {
+                verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+              }),
+            }),
+          }),
+        }),
+      );
+    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue(
+      create(CreatePasskeyRegistrationLinkResponseSchema, {
+        code: create(PasskeyRegistrationCodeSchema, { id: "code-id", code: "code-value" }),
+      }),
+    );
+    vi.mocked(registerPasskey).mockResolvedValue(
+      create(RegisterPasskeyResponseSchema, {
+        passkeyId: "passkey-123",
+        publicKeyCredentialCreationOptions: {},
+      }),
+    );
     vi.mocked(timestampDate).mockReturnValue(new Date(0));
 
     await expect(registerPasskeyLink({ sessionId: "session-123" })).resolves.toHaveProperty("passkeyId");
@@ -831,23 +868,21 @@ describe("verifyPasskeyRegistration", () => {
 
   test("does not finalize registration using WebAuthn verification without user verification", async () => {
     vi.mocked(isSessionValid).mockResolvedValue(true);
-    vi.mocked(getSessionCookieById).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
-    vi.mocked(getSession).mockResolvedValue({
-      session: {
-        id: "session-123",
-        factors: {
-          user: { id: "user-123", loginName: "max@zitadel.com" },
-          webAuthN: {
-            verifiedAt: { seconds: BigInt(1700000000), nanos: 0 },
-            userVerified: false,
-          },
-        },
-      },
-    });
+    vi.mocked(getSessionCookieById).mockResolvedValue(sessionCookie);
+    vi.mocked(getSession).mockResolvedValue(
+      create(GetSessionResponseSchema, {
+        session: create(SessionSchema, {
+          id: "session-123",
+          factors: create(FactorsSchema, {
+            user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+            webAuthN: create(WebAuthNFactorSchema, {
+              verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+              userVerified: false,
+            }),
+          }),
+        }),
+      }),
+    );
 
     await expect(
       verifyPasskeyRegistration({
@@ -861,53 +896,65 @@ describe("verifyPasskeyRegistration", () => {
   });
 
   test("allows registration for a cookie-backed session with user-verified WebAuthn", async () => {
-    vi.mocked(getSessionCookieById).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
-    vi.mocked(getSession).mockResolvedValue({
-      session: {
-        id: "session-123",
-        factors: {
-          user: { id: "user-123", loginName: "max@zitadel.com" },
-          webAuthN: {
-            verifiedAt: { seconds: BigInt(1700000000), nanos: 0 },
-            userVerified: true,
-          },
-        },
-      },
-    });
-    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue({
-      code: { id: "code-id", code: "code-value" },
-    });
-    vi.mocked(registerPasskey).mockResolvedValue({
-      passkeyId: "passkey-123",
-      publicKeyCredentialCreationOptions: {},
-    });
+    vi.mocked(getSessionCookieById).mockResolvedValue(sessionCookie);
+    vi.mocked(getSession).mockResolvedValue(
+      create(GetSessionResponseSchema, {
+        session: create(SessionSchema, {
+          id: "session-123",
+          factors: create(FactorsSchema, {
+            user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+            webAuthN: create(WebAuthNFactorSchema, {
+              verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+              userVerified: true,
+            }),
+          }),
+        }),
+      }),
+    );
+    vi.mocked(createPasskeyRegistrationLink).mockResolvedValue(
+      create(CreatePasskeyRegistrationLinkResponseSchema, {
+        code: create(PasskeyRegistrationCodeSchema, { id: "code-id", code: "code-value" }),
+      }),
+    );
+    vi.mocked(registerPasskey).mockResolvedValue(
+      create(RegisterPasskeyResponseSchema, {
+        passkeyId: "passkey-123",
+        publicKeyCredentialCreationOptions: {},
+      }),
+    );
 
     await expect(registerPasskeyLink({ sessionId: "session-123" })).resolves.toHaveProperty("passkeyId");
     expect(vi.mocked(registerPasskey)).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-123" }));
   });
 
   test("keeps code-based invite registration available", async () => {
-    vi.mocked(getUserByID).mockResolvedValue({
-      user: {
-        id: "user-123",
-        preferredLoginName: "max@zitadel.com",
-      },
-    });
+    vi.mocked(getUserByID).mockResolvedValue(
+      create(GetUserByIDResponseSchema, {
+        user: create(UserSchema, { preferredLoginName: "max@zitadel.com" }),
+      }),
+    );
     vi.mocked(createSessionAndUpdateCookie).mockResolvedValue({
-      session: {
+      session: create(SessionSchema, {
         id: "created-session",
-        factors: { user: { id: "user-123" } },
+        factors: create(FactorsSchema, {
+          user: create(UserFactorSchema, { id: "user-123" }),
+        }),
+      }),
+      sessionCookie: {
+        id: "created-session",
+        token: "session-token",
+        loginName: "max@zitadel.com",
+        creationTs: "",
+        expirationTs: "",
+        changeTs: "",
       },
-      sessionCookie: { id: "created-session", token: "session-token" },
     });
-    vi.mocked(registerPasskey).mockResolvedValue({
-      passkeyId: "passkey-123",
-      publicKeyCredentialCreationOptions: {},
-    });
+    vi.mocked(registerPasskey).mockResolvedValue(
+      create(RegisterPasskeyResponseSchema, {
+        passkeyId: "passkey-123",
+        publicKeyCredentialCreationOptions: {},
+      }),
+    );
 
     await expect(
       registerPasskeyLink({
@@ -926,23 +973,25 @@ describe("verifyPasskeyRegistration", () => {
 
   test("verifies code-invite registration through the invitee's authenticated session", async () => {
     vi.mocked(isSessionValid).mockResolvedValue(false);
-    vi.mocked(listAuthenticationMethodTypes).mockResolvedValue({ authMethodTypes: [] });
-    vi.mocked(getUserByID).mockResolvedValue({
-      user: { preferredLoginName: "max@zitadel.com" },
-    });
-    vi.mocked(getSessionCookieByLoginName).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
-    vi.mocked(getSession).mockResolvedValue({
-      session: {
-        id: "session-123",
-        factors: {
-          user: { id: "user-123", loginName: "max@zitadel.com" },
-        },
-      },
-    });
+    vi.mocked(listAuthenticationMethodTypes).mockResolvedValue(
+      create(ListAuthenticationMethodTypesResponseSchema, { authMethodTypes: [] }),
+    );
+    vi.mocked(getUserByID).mockResolvedValue(
+      create(GetUserByIDResponseSchema, {
+        user: create(UserSchema, { preferredLoginName: "max@zitadel.com" }),
+      }),
+    );
+    vi.mocked(getSessionCookieByLoginName).mockResolvedValue(sessionCookie);
+    vi.mocked(getSession).mockResolvedValue(
+      create(GetSessionResponseSchema, {
+        session: create(SessionSchema, {
+          id: "session-123",
+          factors: create(FactorsSchema, {
+            user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+          }),
+        }),
+      }),
+    );
 
     await expect(
       verifyPasskeyRegistration({
@@ -962,20 +1011,20 @@ describe("verifyPasskeyRegistration", () => {
   });
 
   test("rejects final verification when the fetched session ID differs from the selected cookie", async () => {
-    vi.mocked(getSessionCookieById).mockResolvedValue({
-      id: "session-123",
-      token: "session-token",
-      loginName: "max@zitadel.com",
-    });
-    vi.mocked(getSession).mockResolvedValue({
-      session: {
-        id: "different-session",
-        factors: {
-          user: { id: "user-123", loginName: "max@zitadel.com" },
-          password: { verifiedAt: { seconds: BigInt(1700000000), nanos: 0 } },
-        },
-      },
-    });
+    vi.mocked(getSessionCookieById).mockResolvedValue(sessionCookie);
+    vi.mocked(getSession).mockResolvedValue(
+      create(GetSessionResponseSchema, {
+        session: create(SessionSchema, {
+          id: "different-session",
+          factors: create(FactorsSchema, {
+            user: create(UserFactorSchema, { id: "user-123", loginName: "max@zitadel.com" }),
+            password: create(PasswordFactorSchema, {
+              verifiedAt: create(TimestampSchema, { seconds: BigInt(1700000000), nanos: 0 }),
+            }),
+          }),
+        }),
+      }),
+    );
 
     await expect(
       verifyPasskeyRegistration({

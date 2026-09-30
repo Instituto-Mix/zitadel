@@ -118,6 +118,14 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
             autoComplete="password"
             autoFocus
             {...register("password", { required: t("verify.required.password") })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                if (!loading && formState.isValid) {
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }
+            }}
             label={t("verify.labels.password")}
             data-testid="password-text-input"
           />

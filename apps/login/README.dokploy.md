@@ -40,6 +40,15 @@ backend instead.
 4. The app then signs the user in with the newly chosen password and continues the
    normal session/MFA/redirect flow.
 
+On the login-name and password screens, Enter submits the same form as Continue,
+including the existing validation and sign-in flow.
+
+Dependency checks use pnpm: run `pnpm --filter @zitadel/login outdated --format json`
+and `pnpm audit --json` from the repository root. The audit covers the workspace;
+inspect `apps__login>` paths separately. Login uses Next.js 16.3.8 and Vitest 4.1.11
+after security updates. Run `pnpm run build` and `pnpm run test-unit` from
+`apps/login` to validate Login without invoking Nx's shared generation prerequisites.
+
 The provisioner pins Zitadel's `userId` to the ERP pessoa id at creation, so for a
 provisioned user the two ids are the same value. The app still spends the code against
 the id **it** resolved, never the one in the response body; if the two disagree the user
@@ -68,9 +77,10 @@ batch rather than fixing with a shared store today.
 
 ## Entrar credential management
 
-The Applications page at `https://entrar.institutomix.com.br/apps` links to
-`/passkey/set` and `/authenticator/set` on that same origin. The Login v2 app
-authenticates against the separate issuer/API at `https://id.institutomix.com.br`;
+The Applications page at `https://entrar.institutomix.com.br/apps` groups
+Email, `/passkey/set`, and `/authenticator/set` as account actions; its footer
+retains Accounts and Logout. Credential setup opens on that same origin. The
+Login v2 app authenticates against the separate issuer/API at `https://id.institutomix.com.br`;
 do not redirect enrollment to the issuer. WebAuthn enrollment must complete on
 Entrar: a passkey enrolled on `id.institutomix.com.br` does not automatically
 authenticate at `entrar.institutomix.com.br`.

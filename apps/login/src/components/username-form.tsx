@@ -101,7 +101,6 @@ export function UsernameForm({
   return (
     <>
       {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
-      {/* onSubmit makes Enter in the loginname input submit the form (same as clicking Continue) */}
       <form className="w-full" onSubmit={handleSubmit((e) => submitLoginName(e, organization))}>
         <div className="">
           <TextInput
@@ -112,6 +111,14 @@ export function UsernameForm({
             spellCheck={false}
             autoFocus
             {...register("loginName", { required: t("required.loginName") })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                if (!loading && formState.isValid) {
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }
+            }}
             label={inputLabel}
             data-testid="username-text-input"
             suffix={hideSuffix ? undefined : suffix}

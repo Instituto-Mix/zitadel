@@ -132,7 +132,7 @@ describe("managed passkey actions", () => {
 
   afterEach(() => {
     if (originalApiUrl === undefined) {
-      delete process.env.ZITADEL_API_URL;
+      Reflect.deleteProperty(process.env, "ZITADEL_API_URL");
     } else {
       process.env.ZITADEL_API_URL = originalApiUrl;
     }
