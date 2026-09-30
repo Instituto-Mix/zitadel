@@ -469,7 +469,9 @@
   "apps": {
     "title": "Applications",
     "description": "These are the applications you have access to.",
-    "noResults": "No applications available for your account."
+    "noResults": "No applications available for your account.",
+    "setUpPasskey": "Passkey einrichten",
+    "setUpAuthenticatorOtp": "Authentifikator (OTP) einrichten"
   },
   "email": {
     "title": "Email",

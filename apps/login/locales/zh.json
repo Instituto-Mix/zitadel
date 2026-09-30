@@ -469,7 +469,9 @@
   "apps": {
     "title": "Applications",
     "description": "These are the applications you have access to.",
-    "noResults": "No applications available for your account."
+    "noResults": "No applications available for your account.",
+    "setUpPasskey": "设置密钥",
+    "setUpAuthenticatorOtp": "设置认证应用（OTP）"
   },
   "email": {
     "title": "Email",

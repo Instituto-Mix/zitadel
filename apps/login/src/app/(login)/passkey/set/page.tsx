@@ -1,8 +1,10 @@
 import { Alert, AlertType } from "@/components/alert";
 import { DynamicTheme } from "@/components/dynamic-theme";
+import { PasskeyManagement } from "@/components/passkey-management";
 import { RegisterPasskey } from "@/components/register-passkey";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
+import { listManagedPasskeys } from "@/lib/server/passkey-management";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import { getBrandingSettings, getUserByID } from "@/lib/zitadel";
@@ -37,6 +39,9 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     });
   }
 
+  const managedPasskeys = session?.id ? await listManagedPasskeys(session.id) : undefined;
+  const initialPasskeys = managedPasskeys && "passkeys" in managedPasskeys ? managedPasskeys.passkeys : [];
+  const passkeyError = managedPasskeys && "error" in managedPasskeys ? managedPasskeys.error : undefined;
   const branding = await getBrandingSettings({ serviceConfig, organization });
 
   let user: User | undefined;
@@ -101,16 +106,19 @@ export default async function Page(props: { searchParams: Promise<Record<string 
         )}
 
         {(session?.id || userId) && (
-          <RegisterPasskey
-            sessionId={session?.id}
-            userId={userId}
-            isPrompt={!!prompt}
-            organization={organization}
-            requestId={requestId}
-            code={code}
-            codeId={codeId}
-            loginName={loginName ?? session?.factors?.user?.loginName ?? user?.preferredLoginName}
-          />
+          <>
+            {session?.id && <PasskeyManagement sessionId={session.id} passkeys={initialPasskeys} error={passkeyError} />}
+            <RegisterPasskey
+              sessionId={session?.id}
+              userId={userId}
+              isPrompt={!!prompt}
+              organization={organization}
+              requestId={requestId}
+              code={code}
+              codeId={codeId}
+              loginName={loginName ?? session?.factors?.user?.loginName ?? user?.preferredLoginName}
+            />
+          </>
         )}
       </div>
     </DynamicTheme>

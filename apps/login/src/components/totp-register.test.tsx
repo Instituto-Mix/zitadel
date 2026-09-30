@@ -1,9 +1,15 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { TotpRegister } from "./totp-register";
 
+const mocks = vi.hoisted(() => ({
+  verifyTOTP: vi.fn(),
+  completeFlowOrGetUrl: vi.fn(),
+  push: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mocks.push }),
 }));
 
 vi.mock("next-intl", () => ({
@@ -11,12 +17,11 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/lib/server/verify", () => ({
-  verifyTOTP: vi.fn(),
+  verifyTOTP: mocks.verifyTOTP,
 }));
 
 vi.mock("@/lib/client", () => ({
-  handleServerActionResponse: vi.fn(),
-  completeFlowOrGetUrl: vi.fn(),
+  completeFlowOrGetUrl: mocks.completeFlowOrGetUrl,
 }));
 
 vi.mock("qrcode.react", () => ({
@@ -29,5 +34,33 @@ describe("TotpRegister", () => {
   test("should autofocus the code input on mount", () => {
     const { getByTestId } = render(<TotpRegister uri="otpauth://totp/test" secret="SECRET" />);
     expect(getByTestId("code-text-input")).toHaveFocus();
+  });
+
+  test("shows a returned verification error without completing the flow", async () => {
+    mocks.verifyTOTP.mockResolvedValue({ error: "Invalid code" });
+
+    const { getByTestId, findByText } = render(
+      <TotpRegister
+        uri="otpauth://totp/test"
+        secret="SECRET"
+        sessionId="selected-session"
+        loginName="person@example.com"
+        organization="selected-organization"
+        requestId="request-id"
+      />,
+    );
+    fireEvent.change(getByTestId("code-text-input"), { target: { value: "123456" } });
+    await waitFor(() => expect(getByTestId("submit-button")).toBeEnabled());
+    fireEvent.click(getByTestId("submit-button"));
+
+    expect(await findByText("Invalid code")).toBeInTheDocument();
+    expect(mocks.verifyTOTP).toHaveBeenCalledWith(
+      "123456",
+      "selected-session",
+      "person@example.com",
+      "selected-organization",
+    );
+    expect(mocks.completeFlowOrGetUrl).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

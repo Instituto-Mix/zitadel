@@ -66,6 +66,27 @@ Nothing is lost or corrupted and the reset code is not reused; the user simply s
 "this first access session has expired". Worth timing rollouts away from a migration
 batch rather than fixing with a shared store today.
 
+## Entrar credential management
+
+The Applications page at `https://entrar.institutomix.com.br/apps` links to
+`/passkey/set` and `/authenticator/set` on that same origin. The Login v2 app
+authenticates against the separate issuer/API at `https://id.institutomix.com.br`;
+do not redirect enrollment to the issuer. WebAuthn enrollment must complete on
+Entrar: a passkey enrolled on `id.institutomix.com.br` does not automatically
+authenticate at `entrar.institutomix.com.br`.
+
+The links use the signed-in session's canonical login name and organization.
+The management pages revalidate the selected session and derive the account ID
+server-side before listing or removing credentials. A user can add or remove
+passkeys and view the authenticator (TOTP) state. Replacing an authenticator
+means removing the old one and then enrolling a new one; passkey replacement
+means enrolling a new key before removing the old key.
+
+Passkey removal serializes the last-sign-in-method check and deletion within
+each app process. **Keep Entrar at one instance** for that safeguard: session
+affinity alone does not prevent simultaneous removal requests routed to
+different instances. Reassess the lock before scaling beyond one instance.
+
 ---
 
 ## Files

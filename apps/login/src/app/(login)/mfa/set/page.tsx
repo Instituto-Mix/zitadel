@@ -54,9 +54,16 @@ export default async function Page(props: { searchParams: Promise<Record<string 
   const _headers = await headers();
   const { serviceConfig } = getServiceConfig(_headers);
 
-  const sessionWithData = sessionId
-    ? await loadSessionById(sessionId, organization)
-    : await loadSessionByLoginname(loginName, organization);
+  const sessionWithData =
+    sessionId !== undefined ? await loadSessionById(sessionId) : await loadSessionByLoginname(loginName, organization);
+
+  const accountLoginName = sessionWithData ? sessionWithData.factors?.user?.loginName : loginName;
+  const accountOrganization = sessionWithData ? sessionWithData.factors?.user?.organizationId : organization;
+  const accountSearchParams = {
+    ...searchParams,
+    loginName: accountLoginName,
+    organization: accountOrganization,
+  };
 
   async function getAuthMethodsAndUser(session?: Session) {
     const userId = session?.factors?.user?.id;
@@ -93,8 +100,8 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     });
   }
 
-  async function loadSessionById(sessionId: string, organization?: string) {
-    const recent = await getSessionCookieById({ sessionId, organization });
+  async function loadSessionById(sessionId: string) {
+    const recent = await getSessionCookieById({ sessionId });
 
     if (!recent) {
       return undefined;
@@ -105,7 +112,7 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     });
   }
 
-  const branding = await getBrandingSettings({ serviceConfig, organization });
+  const branding = await getBrandingSettings({ serviceConfig, organization: accountOrganization });
   const loginSettings = await getLoginSettings({
     serviceConfig,
     organization: sessionWithData?.factors?.user?.organizationId,
@@ -135,14 +142,14 @@ export default async function Page(props: { searchParams: Promise<Record<string 
         loginName: sessionWithData.factors.user.loginName,
         send: "true",
       });
-      const org = organization ?? sessionWithData.factors.user.organizationId;
+      const org = accountOrganization;
 
       if (requestId) {
         verifyParams.set("requestId", requestId);
       }
 
       if (org) {
-        verifyParams.set("organization", org as string);
+        verifyParams.set("organization", org);
       }
       redirect(`/verify?${verifyParams}`);
     }
@@ -161,10 +168,10 @@ export default async function Page(props: { searchParams: Promise<Record<string 
 
         {sessionWithData && (
           <UserAvatar
-            loginName={loginName ?? sessionWithData.factors?.user?.loginName}
+            loginName={accountLoginName}
             displayName={sessionWithData.factors?.user?.displayName}
             showDropdown
-            searchParams={searchParams}
+            searchParams={accountSearchParams}
           ></UserAvatar>
         )}
       </div>
@@ -186,10 +193,10 @@ export default async function Page(props: { searchParams: Promise<Record<string 
           {valid && loginSettings && sessionWithData && sessionWithData.factors?.user?.id && (
             <ChooseSecondFactorToSetup
               userId={sessionWithData.factors?.user?.id}
-              loginName={loginName}
+              loginName={accountLoginName}
               sessionId={sessionWithData.id}
               requestId={requestId}
-              organization={organization}
+              organization={accountOrganization}
               loginSettings={loginSettings}
               userMethods={sessionWithData.authMethods ?? []}
               phoneVerified={sessionWithData.phoneVerified ?? false}

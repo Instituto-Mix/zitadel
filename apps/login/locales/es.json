@@ -469,7 +469,9 @@
   "apps": {
     "title": "Aplicaciones",
     "description": "Estas son las aplicaciones a las que tienes acceso.",
-    "noResults": "No hay aplicaciones disponibles para tu cuenta."
+    "noResults": "No hay aplicaciones disponibles para tu cuenta.",
+    "setUpPasskey": "Configurar una clave de acceso",
+    "setUpAuthenticatorOtp": "Configurar un autenticador (OTP)"
   },
   "email": {
     "title": "Correo",

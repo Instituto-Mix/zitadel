@@ -3,6 +3,27 @@
 ## Context
 The **Login App** (`apps/login`) provides the user interface for authentication flows (Login, Register, MFA, etc.). It is built with Next.js and React.
 
+## Hard project boundary
+- **Edit only `apps/login/**`.** Do not modify, generate files in, stage, or resolve
+  merge conflicts in any other part of the ZITADEL repository, including root
+  files, the backend demo client, `proto/`, and `packages/`. This restriction
+  takes precedence over broader repository guidance.
+- Read outside `apps/login/` only when strictly necessary for a specific
+  Login v2 dependency or investigation, and inspect the smallest relevant
+  portion. Other projects are for rare exploration, not implementation.
+- If Login v2 work truly requires a change outside `apps/login/`, stop and
+  request explicit authorization before touching that path. During upstream
+  pulls or merges, preserve this fork's `apps/login/AGENTS.md` and Login v2
+  customizations; do not extend the merge work into other projects.
+
+## Entrar Deployment Context
+- This fork deploys Login v2 as the user-facing UI at `https://entrar.institutomix.com.br`; it authenticates against the ZITADEL OIDC issuer/API at `https://id.institutomix.com.br`. The login UI is not the issuer.
+- Use the Entrar origin for passkey enrollment and browser login flows. Passkeys enrolled on `id.institutomix.com.br` do not automatically work on `entrar.institutomix.com.br`; browser credentials are origin-bound.
+- Preserve fork-specific legacy-identifier and first-access customizations when syncing upstream; do not overwrite them with upstream Login changes.
+- Avoid hardcoded user or organization IDs; use configuration or runtime context.
+- For deployment context, consult the repository root `AGENTS.md` and `README.dokploy.md`.
+- Preserve this fork-maintained `AGENTS.md` during upstream merges; our guidance takes precedence over conflicting upstream content (see root `AGENTS.md`).
+
 ## Key Technology
 - **Framework**: Next.js (React).
 - **Styling**: TailwindCSS, configured via `apps/login/tailwind.config.mjs`.
@@ -13,7 +34,9 @@ The **Login App** (`apps/login`) provides the user interface for authentication 
 - **Routing**: Uses the Next.js App Router (routes are defined under `src/app/`).
 - **Composability**: Components should be small and reusable.
 - **State**: Critical authentication state is often managed via URL parameters (Auth Requests) and cookies/sessions.
-- **Scope Rule**: For shared API typings and client behavior, also read `packages/AGENTS.md` and `proto/AGENTS.md`.
+- For a strictly necessary shared API question, consult only the relevant
+  portion of `packages/AGENTS.md` or `proto/AGENTS.md`; those paths remain
+  read-only under the hard project boundary above.
 
 ## Verified Nx Targets
 - **Dev Server**: `pnpm nx run @zitadel/login:dev`

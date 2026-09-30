@@ -469,7 +469,9 @@
   "apps": {
     "title": "Applications",
     "description": "These are the applications you have access to.",
-    "noResults": "No applications available for your account."
+    "noResults": "No applications available for your account.",
+    "setUpPasskey": "Jelkulcs beállítása",
+    "setUpAuthenticatorOtp": "Hitelesítő alkalmazás beállítása (OTP)"
   },
   "email": {
     "title": "Email",

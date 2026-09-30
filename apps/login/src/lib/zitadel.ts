@@ -2,8 +2,8 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import { Client, create, Duration } from "@zitadel/client";
 import { makeReqCtx } from "@zitadel/client/v2";
 import { AppService } from "@zitadel/proto/zitadel/app/v2beta/app_service_pb";
-import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
 import { State as AuthorizationState } from "@zitadel/proto/zitadel/authorization/v2/authorization_pb";
+import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
 import { IdentityProviderService } from "@zitadel/proto/zitadel/idp/v2/idp_service_pb";
 import { OrganizationSchema, TextQueryMethod } from "@zitadel/proto/zitadel/object/v2/object_pb";
 import { CreateCallbackRequest, OIDCService } from "@zitadel/proto/zitadel/oidc/v2/oidc_service_pb";
@@ -1418,6 +1418,41 @@ export async function listApplications({
   const appService: Client<typeof AppService> = await createServiceForHost(AppService, serviceConfig);
 
   return appService.listApplications({ projectId });
+}
+
+export async function listPasskeys({
+  serviceConfig,
+  userId,
+}: WithServiceConfig<{
+  userId: string;
+}>) {
+  const userService: Client<typeof UserService> = await createServiceForHost(UserService, serviceConfig);
+
+  return userService.listPasskeys({ userId });
+}
+
+export async function removePasskey({
+  serviceConfig,
+  userId,
+  passkeyId,
+}: WithServiceConfig<{
+  userId: string;
+  passkeyId: string;
+}>) {
+  const userService: Client<typeof UserService> = await createServiceForHost(UserService, serviceConfig);
+
+  return userService.removePasskey({ userId, passkeyId });
+}
+
+export async function removeTOTP({
+  serviceConfig,
+  userId,
+}: WithServiceConfig<{
+  userId: string;
+}>) {
+  const userService: Client<typeof UserService> = await createServiceForHost(UserService, serviceConfig);
+
+  return userService.removeTOTP({ userId });
 }
 
 export async function listAuthenticationMethodTypes({

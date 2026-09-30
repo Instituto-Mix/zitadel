@@ -5,14 +5,15 @@ import { NavLinks } from "@/components/nav-links";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { DiscoverableApp, toDiscoveredApps } from "@/lib/apps-discovery";
-import { fetchSiteMeta, SiteMeta } from "@/lib/site-meta";
 import { isEmailPending } from "@/lib/email-status";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
+import { fetchSiteMeta, SiteMeta } from "@/lib/site-meta";
 import { getBrandingSettings, listApplications, listAuthorizations } from "@/lib/zitadel";
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -44,6 +45,13 @@ export default async function Page(props: { searchParams: Promise<Record<string,
   if (!userId) {
     redirect("/loginname");
   }
+
+  const canonicalLoginName = sessionFactors?.factors?.user?.loginName;
+  const canonicalOrganizationId = sessionFactors?.factors?.user?.organizationId;
+  const credentialSetupParams =
+    canonicalLoginName && canonicalOrganizationId
+      ? new URLSearchParams({ loginName: canonicalLoginName, organization: canonicalOrganizationId }).toString()
+      : undefined;
 
   const branding = await getBrandingSettings({ serviceConfig, organization });
   const emailPending = await isEmailPending(serviceConfig, userId);
@@ -138,7 +146,7 @@ export default async function Page(props: { searchParams: Promise<Record<string,
                   href={app.url}
                   name={`app-${app.id}`}
                   title={app.meta.description ?? undefined}
-                  className="border-divider-light dark:border-divider-dark hover:bg-black/5 dark:hover:bg-white/5 flex flex-row items-center space-x-3 rounded-md border px-4 py-3 transition-colors"
+                  className="border-divider-light dark:border-divider-dark flex flex-row items-center space-x-3 rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                 >
                   <AppIcon name={app.name} favicon={app.meta.favicon} />
                   <span className="flex flex-col">
@@ -150,6 +158,23 @@ export default async function Page(props: { searchParams: Promise<Record<string,
             </div>
           </div>
         ))}
+
+        {credentialSetupParams && (
+          <section className="flex flex-col space-y-2" aria-label="Account security">
+            <Link
+              href={`/passkey/set?${credentialSetupParams}`}
+              className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <Translated i18nKey="setUpPasskey" namespace="apps" />
+            </Link>
+            <Link
+              href={`/authenticator/set?${credentialSetupParams}`}
+              className="border-divider-light dark:border-divider-dark flex flex-row items-center rounded-md border px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <Translated i18nKey="setUpAuthenticatorOtp" namespace="apps" />
+            </Link>
+          </section>
+        )}
 
         <NavLinks current="apps" emailPending={emailPending} />
       </div>

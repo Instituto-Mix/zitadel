@@ -469,7 +469,9 @@
   "apps": {
     "title": "Applications",
     "description": "These are the applications you have access to.",
-    "noResults": "No applications available for your account."
+    "noResults": "No applications available for your account.",
+    "setUpPasskey": "パスキーを設定",
+    "setUpAuthenticatorOtp": "認証アプリを設定（OTP）"
   },
   "email": {
     "title": "Email",

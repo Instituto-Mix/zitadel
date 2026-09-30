@@ -20,7 +20,7 @@ function stripProtocol(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }
 
-export function getServiceConfig(headers: ReadonlyHeaders): { serviceConfig: ServiceConfig } {
+export function getServiceConfig(_headers: ReadonlyHeaders): { serviceConfig: ServiceConfig } {
   if (!process.env.ZITADEL_API_URL) {
     throw new Error("ZITADEL_API_URL is not set");
   }

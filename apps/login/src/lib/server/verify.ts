@@ -14,40 +14,77 @@ import {
 } from "@/lib/zitadel";
 import crypto from "crypto";
 
-import { create } from "@zitadel/client";
+import { create, timestampDate } from "@zitadel/client";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
 import { ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
+import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { getTranslations } from "next-intl/server";
 import { cookies, headers } from "next/headers";
 import { completeFlowOrGetUrl } from "../client";
-import { getSessionCookieByLoginName } from "../cookies";
+import { getMostRecentCookieWithLoginname, getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
 import { getOrSetFingerprintId } from "../fingerprint";
 import { checkMFAFactors } from "../mfa-helper";
 import { getServiceConfig } from "../service-url";
-import { loadMostRecentSession } from "../session";
 import { createSessionAndUpdateCookie } from "./cookie";
 import { getPublicHostWithProtocol } from "./host";
 
 const logger = createLogger("verify");
 
-export async function verifyTOTP(code: string, loginName?: string, organization?: string) {
+function isSessionValidForTOTPVerification(session: Session): boolean {
+  const hasVerifiedFactor = Boolean(
+    session.factors?.password?.verifiedAt ||
+    (session.factors?.webAuthN?.verifiedAt && session.factors?.webAuthN?.userVerified) ||
+    session.factors?.intent?.verifiedAt,
+  );
+  const isUnexpired = !session.expirationDate || timestampDate(session.expirationDate) > new Date();
+
+  return hasVerifiedFactor && isUnexpired;
+}
+
+export async function verifyTOTP(code: string, sessionId?: string, loginName?: string, organization?: string) {
   const _headers = await headers();
   const { serviceConfig } = getServiceConfig(_headers);
 
-  return loadMostRecentSession({
+  const sessionCookie =
+    sessionId !== undefined
+      ? await getSessionCookieById({ sessionId })
+      : await getMostRecentCookieWithLoginname({ loginName, organization });
+
+  if (!sessionCookie) {
+    return { error: "Could not find the requested session" };
+  }
+
+  const sessionResponse = await getSession({
     serviceConfig,
-    sessionParams: {
-      loginName,
-      organization,
-    },
-  }).then((session) => {
-    if (session?.factors?.user?.id) {
-      return verifyTOTPRegistration({ serviceConfig, code, userId: session.factors.user.id });
-    } else {
-      throw Error("No user id found in session.");
-    }
+    sessionId: sessionCookie.id,
+    sessionToken: sessionCookie.token,
   });
+  const session = sessionResponse?.session;
+  const user = session?.factors?.user;
+
+  if (!session || session.id !== sessionCookie.id || (sessionId !== undefined && session.id !== sessionId) || !user?.id) {
+    return { error: "Could not determine user from session" };
+  }
+
+  if (
+    (loginName !== undefined && loginName !== user.loginName) ||
+    (organization !== undefined && organization !== user.organizationId)
+  ) {
+    return { error: "The session does not match the requested account" };
+  }
+
+  if (!isSessionValidForTOTPVerification(session)) {
+    return { error: "A current, verified session is required to verify an authenticator" };
+  }
+
+  const loginSettings = await getLoginSettings({ serviceConfig, organization: user.organizationId });
+
+  if (!loginSettings?.secondFactors?.includes(SecondFactorType.OTP)) {
+    return { error: "Authenticator app verification is not allowed by the login policy" };
+  }
+
+  return verifyTOTPRegistration({ serviceConfig, code, userId: user.id });
 }
 
 type VerifyUserByEmailCommand = {

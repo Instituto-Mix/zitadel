@@ -3,6 +3,7 @@ import { BackButton } from "@/components/back-button";
 import { ChooseAuthenticatorToSetup } from "@/components/choose-authenticator-to-setup";
 import { DynamicTheme } from "@/components/dynamic-theme";
 import { SignInWithIdp } from "@/components/sign-in-with-idp";
+import { TotpManagement } from "@/components/totp-management";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { getSessionCookieById } from "@/lib/cookies";
@@ -18,6 +19,8 @@ import {
   listAuthenticationMethodTypes,
 } from "@/lib/zitadel";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
+import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
+import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 // import { getLocale } from "next-intl/server";
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
@@ -143,6 +146,25 @@ export default async function Page(props: { searchParams: Promise<Record<string 
   if (requestId) {
     params.set("requestId", requestId);
   }
+  const userLoginName = sessionWithData.factors.user.loginName;
+  const userOrganizationId = sessionWithData.factors.user.organizationId;
+  const totpSetupAllowed = loginSettings?.secondFactors.includes(SecondFactorType.OTP);
+  const totpSetupParams = new URLSearchParams();
+  if (userLoginName) {
+    totpSetupParams.set("loginName", userLoginName);
+  }
+  if (userOrganizationId) {
+    totpSetupParams.set("organization", userOrganizationId);
+  }
+  if (sessionWithData.id) {
+    totpSetupParams.set("sessionId", sessionWithData.id);
+  }
+  if (requestId) {
+    totpSetupParams.set("requestId", requestId);
+  }
+  const totpSetupHref =
+    totpSetupAllowed && userLoginName && userOrganizationId ? `/mfa/set?${totpSetupParams.toString()}` : undefined;
+  const totpConfigured = sessionWithData.authMethods.includes(AuthenticationMethodType.TOTP);
 
   return (
     <DynamicTheme branding={branding}>
@@ -171,6 +193,12 @@ export default async function Page(props: { searchParams: Promise<Record<string 
             params={params}
           ></ChooseAuthenticatorToSetup>
         )}
+        <TotpManagement
+          sessionId={sessionWithData.id}
+          configured={totpConfigured}
+          setupAllowed={totpSetupAllowed}
+          setupHref={totpSetupHref}
+        />
 
         {loginSettings?.allowExternalIdp && !!identityProviders.length && (
           <>

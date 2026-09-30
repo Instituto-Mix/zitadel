@@ -21,8 +21,9 @@ import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { userAgent } from "next/server";
 import { completeFlowOrGetUrl } from "../client";
-import { getSessionCookieById } from "../cookies";
+import { getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
 import { getServiceConfig } from "../service-url";
+import { isSessionValid as isLoginSessionValid } from "../session";
 import { checkEmailVerification, checkUserVerification } from "../verify-helper";
 import { createSessionAndUpdateCookie } from "./cookie";
 import { getPublicHost } from "./host";
@@ -85,6 +86,9 @@ export async function registerPasskeyLink(
     }
 
     session = await getSession({ serviceConfig, sessionId: sessionCookie.id, sessionToken: sessionCookie.token });
+    if (session?.session?.id !== command.sessionId) {
+      return { error: "Could not get session" };
+    }
 
     if (!session?.session?.factors?.user?.id) {
       return { error: "Could not determine user from session" };
@@ -94,7 +98,15 @@ export async function registerPasskeyLink(
 
     const sessionValid = isSessionValid(session.session);
 
-    if (!sessionValid.valid) {
+    if (sessionValid.verifiedAt) {
+      if (session.session.factors?.webAuthN?.verifiedAt && !session.session.factors.webAuthN.userVerified) {
+        return { error: "You have to authenticate or have a valid User Verification Check" };
+      }
+
+      if (!(await isLoginSessionValid({ serviceConfig, session: session.session }))) {
+        return { error: "You have to authenticate or have a valid User Verification Check" };
+      }
+    } else {
       const authmethods = await listAuthenticationMethodTypes({ serviceConfig, userId: currentUserId });
 
       // if the user has no authmethods set, we need to check if the user was verified
@@ -181,12 +193,12 @@ export async function registerPasskeyLink(
 }
 
 export async function verifyPasskeyRegistration(command: VerifyPasskeyCommand) {
-  const _headers = await headers();
-  const { serviceConfig } = getServiceConfig(_headers);
-
   if (!command.sessionId && !command.userId) {
     throw new Error("Either sessionId or userId must be provided");
   }
+
+  const _headers = await headers();
+  const { serviceConfig } = getServiceConfig(_headers);
 
   // if no name is provided, try to generate one from the user agent
   let passkeyName = command.passkeyName;
@@ -200,42 +212,69 @@ export async function verifyPasskeyRegistration(command: VerifyPasskeyCommand) {
     }${os.name}${os.name ? ", " : ""}${browser.name}`;
   }
 
-  let loginName: string | undefined;
-  let currentUserId: string;
-
+  let sessionCookie: { id: string; token: string } | undefined;
   if (command.sessionId) {
-    // Session-based flow
-    const sessionCookie = await getSessionCookieById({
+    sessionCookie = await getSessionCookieById({
       sessionId: command.sessionId,
     });
-
-    if (!sessionCookie) {
-      throw new Error("Could not get session cookie");
-    }
-
-    const session = await getSession({ serviceConfig, sessionId: sessionCookie.id, sessionToken: sessionCookie.token });
-    const userId = session?.session?.factors?.user?.id;
-
-    if (!userId) {
-      throw new Error("Could not get session");
-    }
-
-    currentUserId = userId;
-    loginName = session?.session?.factors?.user?.loginName;
   } else {
-    // UserId-based flow
-    currentUserId = command.userId!;
+    const userResponse = await getUserByID({ serviceConfig, userId: command.userId! });
 
-    // Verify user exists
-    const userResponse = await getUserByID({ serviceConfig, userId: currentUserId });
-
-    if (!userResponse || !userResponse.user) {
+    if (!userResponse?.user) {
       throw new Error("User not found");
     }
 
-    loginName = userResponse.user.preferredLoginName;
+    sessionCookie = await getSessionCookieByLoginName({
+      loginName: userResponse.user.preferredLoginName,
+    });
   }
 
+  if (!sessionCookie) {
+    throw new Error("Could not get session cookie");
+  }
+
+  const selectedSessionId = command.sessionId ?? sessionCookie.id;
+  const sessionResponse = await getSession({
+    serviceConfig,
+    sessionId: sessionCookie.id,
+    sessionToken: sessionCookie.token,
+  });
+  const session = sessionResponse?.session;
+
+  if (session?.id !== selectedSessionId) {
+    throw new Error("Could not get session");
+  }
+
+  const currentUserId = session.factors?.user?.id;
+
+  if (!currentUserId || (command.userId && command.userId !== currentUserId)) {
+    throw new Error("Could not get session");
+  }
+
+  if (session.factors?.webAuthN?.verifiedAt && !session.factors.webAuthN.userVerified) {
+    throw new Error("You have to authenticate or have a valid User Verification Check");
+  }
+
+  const sessionIsValid = await isLoginSessionValid({ serviceConfig, session });
+  if (!sessionIsValid) {
+    const hasPrimaryFactor = !!(
+      session.factors?.password?.verifiedAt ||
+      session.factors?.webAuthN?.verifiedAt ||
+      session.factors?.intent?.verifiedAt
+    );
+    const isSessionUnexpired = !session.expirationDate || timestampDate(session.expirationDate).getTime() > Date.now();
+
+    if (!command.userId || hasPrimaryFactor || !isSessionUnexpired) {
+      throw new Error("You have to authenticate or have a valid User Verification Check");
+    }
+
+    const authMethods = await listAuthenticationMethodTypes({ serviceConfig, userId: currentUserId });
+    if (authMethods.authMethodTypes.length !== 0) {
+      throw new Error("You have to authenticate or have a valid User Verification Check");
+    }
+  }
+
+  const loginName = session.factors?.user?.loginName;
   const response = await zitadelVerifyPasskeyRegistration({
     serviceConfig,
     request: create(VerifyPasskeyRegistrationRequestSchema, {

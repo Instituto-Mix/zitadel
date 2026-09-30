@@ -5,13 +5,28 @@ import { DynamicTheme } from "@/components/dynamic-theme";
 import { TotpRegister } from "@/components/totp-register";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
+import { getSessionCookieById } from "@/lib/cookies";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
-import { addOTPEmail, addOTPSMS, getBrandingSettings, getLoginSettings, registerTOTP } from "@/lib/zitadel";
+import { addOTPEmail, addOTPSMS, getBrandingSettings, getLoginSettings, getSession, registerTOTP } from "@/lib/zitadel";
+import { timestampDate } from "@zitadel/client";
+import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
+import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { RegisterTOTPResponse } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
+function isSessionValidForTOTPSetup(session: Session): boolean {
+  const hasVerifiedFactor = Boolean(
+    session.factors?.password?.verifiedAt ||
+    (session.factors?.webAuthN?.verifiedAt && session.factors?.webAuthN?.userVerified) ||
+    session.factors?.intent?.verifiedAt,
+  );
+  const isUnexpired = !session.expirationDate || timestampDate(session.expirationDate) > new Date();
+
+  return hasVerifiedFactor && isUnexpired;
+}
 
 export default async function Page(props: {
   searchParams: Promise<Record<string | number | symbol, string | undefined>>;
@@ -26,16 +41,49 @@ export default async function Page(props: {
   const _headers = await headers();
   const { serviceConfig } = getServiceConfig(_headers);
 
-  const branding = await getBrandingSettings({ serviceConfig, organization });
-  const loginSettings = await getLoginSettings({ serviceConfig, organization });
+  let session: Session | undefined;
+  if (method === "time-based" && sessionId !== undefined) {
+    const sessionCookie = await getSessionCookieById({ sessionId });
+    if (!sessionCookie) {
+      throw new Error("No selected session found");
+    }
 
-  const session = await loadMostRecentSession({
-    serviceConfig,
-    sessionParams: {
-      loginName,
-      organization,
-    },
-  });
+    const sessionResponse = await getSession({
+      serviceConfig,
+      sessionId: sessionCookie.id,
+      sessionToken: sessionCookie.token,
+    });
+    session = sessionResponse.session;
+
+    if (
+      !session ||
+      session.id !== sessionId ||
+      (loginName !== undefined && loginName !== session.factors?.user?.loginName) ||
+      (organization !== undefined && organization !== session.factors?.user?.organizationId)
+    ) {
+      throw new Error("The selected session does not match the requested account");
+    }
+  } else {
+    session = await loadMostRecentSession({
+      serviceConfig,
+      sessionParams: {
+        loginName,
+        organization,
+      },
+    });
+  }
+
+  if (method === "time-based" && (!session || !session.factors?.user?.id || !isSessionValidForTOTPSetup(session))) {
+    throw new Error("A valid authenticated session is required to set up an authenticator");
+  }
+
+  const accountOrganization = method === "time-based" ? session?.factors?.user?.organizationId : organization;
+  const branding = await getBrandingSettings({ serviceConfig, organization: accountOrganization });
+  const loginSettings = await getLoginSettings({ serviceConfig, organization: accountOrganization });
+
+  if (method === "time-based" && !loginSettings?.secondFactors?.includes(SecondFactorType.OTP)) {
+    throw new Error("Authenticator app setup is not allowed by the login policy");
+  }
 
   let totpResponse: RegisterTOTPResponse | undefined, error: Error | undefined;
   if (session && session.factors?.user?.id) {
