@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getAuthBackendAccessToken } from "./auth-backend-token";
 import { isLegacyMigrateEnabled, legacyMigratePassword } from "./legacy-migrate";
+
+vi.mock("./auth-backend-token", () => ({
+  getAuthBackendAccessToken: vi.fn(),
+}));
 
 // Capture everything handed to the logger. winston's own Console transport
 // flushes asynchronously, so inspecting the log call arguments is both the
@@ -37,7 +42,7 @@ const OK_BODY = { user_id: 1458620, reset_code: "IBJMUC" };
 describe("legacyMigratePassword", () => {
   beforeEach(() => {
     process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1";
-    process.env.AUTH_BACKEND_TOKEN = "token-123";
+    vi.mocked(getAuthBackendAccessToken).mockResolvedValue("access-token");
   });
 
   afterEach(() => {
@@ -97,7 +102,7 @@ describe("legacyMigratePassword", () => {
     });
   });
 
-  it("posts to /auth/legacy-migrate with the service-account header and no double slash", async () => {
+  it("posts to /auth/legacy-migrate with the resolver bearer token and no double slash", async () => {
     const fetchMock = mockFetch(200, OK_BODY);
     process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1/";
 
@@ -106,7 +111,8 @@ describe("legacyMigratePassword", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://backend.example.com/v1/auth/legacy-migrate");
     expect(init.method).toBe("POST");
-    expect(init.headers["x-zitadel-service-account"]).toBe("token-123");
+    expect(init.headers.Authorization).toBe("Bearer access-token");
+    expect(init.headers["x-zitadel-service-account"]).toBeUndefined();
     expect(JSON.parse(init.body)).toEqual({ login_name: "user@example.com", password: "secret" });
   });
 
@@ -119,9 +125,9 @@ describe("legacyMigratePassword", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("does not call the backend when the token is missing", async () => {
+  it("does not call the backend when the resolver token is unavailable", async () => {
     const fetchMock = mockFetch(200, OK_BODY);
-    delete process.env.AUTH_BACKEND_TOKEN;
+    vi.mocked(getAuthBackendAccessToken).mockResolvedValue(undefined);
     await expect(legacyMigratePassword({ loginName: "a@b.com", password: "pw" })).resolves.toEqual({
       outcome: "unavailable",
     });
@@ -137,12 +143,12 @@ describe("legacyMigratePassword", () => {
   });
 });
 
-describe("service account token handling", () => {
-  const SECRET = "super-secret-login-page-pat";
+describe("resolver access token handling", () => {
+  const TOKEN = "access-token";
 
   beforeEach(() => {
     process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1";
-    process.env.AUTH_BACKEND_TOKEN = SECRET;
+    vi.mocked(getAuthBackendAccessToken).mockResolvedValue(TOKEN);
   });
 
   afterEach(() => {
@@ -151,8 +157,6 @@ describe("service account token handling", () => {
     vi.restoreAllMocks();
   });
 
-  // The token is a bearer secret: it may travel in the request header and nowhere
-  // else — not into logs, not into a returned value a caller might render.
   it.each([
     ["an unreachable backend", () => vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")))],
     ["an unexpected status", () => mockFetch(500)],
@@ -163,28 +167,24 @@ describe("service account token handling", () => {
 
     const outcome = await legacyMigratePassword({ loginName: "testuser", password: "erp-password" });
 
-    // sanity: this module really did log here, so the assertions below have teeth
     expect(logCalls.length).toBeGreaterThan(0);
-
     const logged = JSON.stringify(logCalls);
-    expect(logged).not.toContain(SECRET);
-    // the typed password and identifier must not be logged either
+    expect(logged).not.toContain(TOKEN);
     expect(logged).not.toContain("erp-password");
     expect(logged).not.toContain("testuser");
-    expect(JSON.stringify(outcome)).not.toContain(SECRET);
+    expect(JSON.stringify(outcome)).not.toContain(TOKEN);
   });
 
-  it("sends the token only in the x-zitadel-service-account header", async () => {
+  it("sends the token only in the Authorization header", async () => {
     const fetchMock = mockFetch(200, OK_BODY);
 
     await legacyMigratePassword({ loginName: "testuser", password: "erp-password" });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(init.headers["x-zitadel-service-account"]).toBe(SECRET);
-    expect(url).not.toContain(SECRET);
-    expect(init.body).not.toContain(SECRET);
-    // not duplicated into a standard auth header
-    expect(init.headers.Authorization).toBeUndefined();
+    expect(init.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(init.headers["x-zitadel-service-account"]).toBeUndefined();
+    expect(url).not.toContain(TOKEN);
+    expect(init.body).not.toContain(TOKEN);
   });
 });
 
@@ -193,12 +193,14 @@ describe("isLegacyMigrateEnabled", () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  it("requires both the url and the token", () => {
+  it("requires the backend URL and resolver client configuration", () => {
     process.env.AUTH_BACKEND_URL = "https://backend.example.com/v1";
-    delete process.env.AUTH_BACKEND_TOKEN;
+    delete process.env.AUTH_BACKEND_CLIENT_SECRET;
     expect(isLegacyMigrateEnabled()).toBe(false);
 
-    process.env.AUTH_BACKEND_TOKEN = "token-123";
+    process.env.AUTH_BACKEND_CLIENT_SECRET = "resolver-secret";
+    process.env.AUTH_BACKEND_CLIENT_ID = "resolver-client";
+    process.env.AUTH_BACKEND_AUDIENCE = "urn:zitadel:iam:org:project:id:123:aud";
     expect(isLegacyMigrateEnabled()).toBe(true);
   });
 });
