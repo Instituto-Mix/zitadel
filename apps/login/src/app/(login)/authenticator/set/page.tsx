@@ -8,7 +8,7 @@ import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { getSessionCookieById } from "@/lib/cookies";
 import { getServiceConfig } from "@/lib/service-url";
-import { loadMostRecentSession } from "@/lib/session";
+import { hasVerifiedPrimaryFactor, loadMostRecentSession } from "@/lib/session";
 import { checkUserVerification } from "@/lib/verify-helper";
 import {
   getActiveIdentityProviders,
@@ -92,7 +92,8 @@ export default async function Page(props: { searchParams: Promise<Record<string 
   if (!sessionWithData || !sessionWithData.factors || !sessionWithData.factors.user) {
     return (
       <Alert>
-        <Translated i18nKey="unknownContext" namespace="error" />
+        {/* context was provided but the session could not be resolved (cookie missing, invalid or expired) */}
+        <Translated i18nKey={loginName || sessionId ? "sessionExpired" : "unknownContext"} namespace="error" />
       </Alert>
     );
   }
@@ -104,10 +105,13 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     organization: sessionWithData.factors.user?.organizationId,
   });
 
-  // check if user was verified recently
-  const isUserVerified = await checkUserVerification(sessionWithData.factors.user?.id);
+  const isAuthenticated = hasVerifiedPrimaryFactor(sessionWithData).valid;
+  const isVerifiedOnboarding =
+    !isAuthenticated &&
+    sessionWithData.authMethods.length === 0 &&
+    (await checkUserVerification(sessionWithData.factors.user.id));
 
-  if (!isUserVerified) {
+  if (!isAuthenticated && !isVerifiedOnboarding) {
     const params = new URLSearchParams({
       loginName: sessionWithData.factors.user.loginName as string,
       invite: "true",
@@ -214,6 +218,7 @@ export default async function Page(props: { searchParams: Promise<Record<string 
               requestId={requestId}
               organization={sessionWithData.factors?.user?.organizationId}
               sessionId={sessionWithData.id} // tell the callback function to link the IDP
+              loginHint={sessionWithData.factors?.user?.loginName}
             ></SignInWithIdp>
           </>
         )}

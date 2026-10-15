@@ -3,8 +3,8 @@ import { detectCredentialType, type ResolveResponse, substituteLoginName } from 
 
 // Reload per test to isolate the server-side token cache.
 async function resolveLegacyIdentifier(typedValue: string) {
-  const module = await import("./legacy-identifier");
-  return module.resolveLegacyIdentifier(typedValue);
+  const legacyIdentifier = await import("./legacy-identifier");
+  return legacyIdentifier.resolveLegacyIdentifier(typedValue);
 }
 
 describe("detectCredentialType", () => {

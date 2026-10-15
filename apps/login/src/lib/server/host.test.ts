@@ -4,13 +4,30 @@ import { getInstanceHost, getPublicHost, getPublicHostWithProtocol } from "./hos
 describe("Host utility functions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("ZITADEL_PUBLIC_HOST", undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe("getInstanceHost", () => {
+    test("should ignore the public host pin when resolving the instance host", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br");
+      const mockHeaders = new Headers({
+        "x-zitadel-instance-host": "instance.zitadel.cloud",
+        "x-zitadel-forward-host": "forward.zitadel.cloud",
+        host: "internal.server",
+      });
+
+      expect(getInstanceHost(mockHeaders)).toBe("instance.zitadel.cloud");
+      mockHeaders.delete("x-zitadel-instance-host");
+      expect(getInstanceHost(mockHeaders)).toBe("forward.zitadel.cloud");
+      mockHeaders.delete("x-zitadel-forward-host");
+      expect(getInstanceHost(mockHeaders)).toBe("internal.server");
+    });
+
     test("should use x-zitadel-instance-host when available", () => {
       const mockHeaders = {
         get: vi.fn((key: string) => {
@@ -42,6 +59,20 @@ describe("Host utility functions", () => {
   });
 
   describe("getPublicHostWithProtocol", () => {
+    test("should use the pinned public host and preserve its port", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br:8443");
+      const mockHeaders = new Headers({ host: "attacker.example" });
+
+      expect(getPublicHostWithProtocol(mockHeaders)).toBe("https://entrar.institutomix.com.br:8443");
+    });
+
+    test("should retain http for a pinned localhost", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "localhost:3000");
+      const mockHeaders = new Headers({ host: "attacker.example" });
+
+      expect(getPublicHostWithProtocol(mockHeaders)).toBe("http://localhost:3000");
+    });
+
     test("should return https for production domain", () => {
       const mockHeaders = {
         get: vi.fn(() => "zitadel.com"),
@@ -187,6 +218,44 @@ describe("Host utility functions", () => {
   });
 
   describe("getPublicHost", () => {
+    test("should use the pinned host without reading any poisoned host headers", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br");
+      const mockHeaders = new Headers({
+        "x-zitadel-public-host": "public.attacker.example",
+        "x-zitadel-forward-host": "forward.attacker.example",
+        "x-forwarded-host": "proxy.attacker.example",
+        host: "host.attacker.example",
+      });
+      const getHeader = vi.spyOn(mockHeaders, "get");
+
+      expect(getPublicHost(mockHeaders)).toBe("entrar.institutomix.com.br");
+      expect(getHeader).not.toHaveBeenCalled();
+    });
+
+    test("should use the pinned host when no host headers exist", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br");
+
+      expect(getPublicHost(new Headers())).toBe("entrar.institutomix.com.br");
+    });
+
+    test("should retain header precedence when the public host pin is empty", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "");
+      const mockHeaders = new Headers({
+        "x-zitadel-public-host": "public.zitadel.cloud",
+        "x-zitadel-forward-host": "forward.zitadel.cloud",
+        "x-forwarded-host": "proxy.zitadel.cloud",
+        host: "internal.server",
+      });
+
+      expect(getPublicHost(mockHeaders)).toBe("public.zitadel.cloud");
+      mockHeaders.delete("x-zitadel-public-host");
+      expect(getPublicHost(mockHeaders)).toBe("forward.zitadel.cloud");
+      mockHeaders.delete("x-zitadel-forward-host");
+      expect(getPublicHost(mockHeaders)).toBe("proxy.zitadel.cloud");
+      mockHeaders.delete("x-forwarded-host");
+      expect(getPublicHost(mockHeaders)).toBe("internal.server");
+    });
+
     test("should use x-zitadel-public-host when available", () => {
       const mockHeaders = {
         get: vi.fn((key: string) => {

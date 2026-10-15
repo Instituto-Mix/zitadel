@@ -1,4 +1,5 @@
 import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
+import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { verifyTOTP } from "./verify";
 
@@ -10,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getLoginSettings: vi.fn(),
   verifyTOTPRegistration: vi.fn(),
+  listAuthenticationMethodTypes: vi.fn(),
+  checkUserVerification: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
@@ -22,6 +25,10 @@ vi.mock("@/lib/zitadel", () => ({
   getSession: mocks.getSession,
   getLoginSettings: mocks.getLoginSettings,
   verifyTOTPRegistration: mocks.verifyTOTPRegistration,
+  listAuthenticationMethodTypes: mocks.listAuthenticationMethodTypes,
+}));
+vi.mock("../verify-helper", () => ({
+  checkUserVerification: mocks.checkUserVerification,
 }));
 
 const SESSION_ID = "selected-session";
@@ -49,6 +56,13 @@ function session(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function identifyOnlySession(overrides: Record<string, unknown> = {}) {
+  return session({
+    factors: { user: { id: USER_ID, loginName: LOGIN_NAME, organizationId: ORGANIZATION_ID } },
+    ...overrides,
+  });
+}
+
 function useSession(value: unknown = session()) {
   const cookie = { id: SESSION_ID, token: SESSION_TOKEN };
   mocks.getSessionCookieById.mockResolvedValue(cookie);
@@ -56,7 +70,7 @@ function useSession(value: unknown = session()) {
   mocks.getSession.mockResolvedValue({ session: value });
 }
 
-describe("verifyTOTP for signed-in credential management", () => {
+describe("verifyTOTP credential management and onboarding", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.headers.mockResolvedValue(new Headers({ host: "login.example" }));
@@ -64,6 +78,8 @@ describe("verifyTOTP for signed-in credential management", () => {
     useSession();
     mocks.getLoginSettings.mockResolvedValue({ secondFactors: [SecondFactorType.OTP] });
     mocks.verifyTOTPRegistration.mockResolvedValue(RPC_RESULT);
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [AuthenticationMethodType.PASSWORD] });
+    mocks.checkUserVerification.mockResolvedValue(false);
   });
 
   test("verifies using the selected session user and returns the service result", async () => {
@@ -81,6 +97,8 @@ describe("verifyTOTP for signed-in credential management", () => {
       code: CODE,
       userId: USER_ID,
     });
+    expect(mocks.listAuthenticationMethodTypes).not.toHaveBeenCalled();
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
   });
 
   test("rejects a selected session whose returned identity does not match the requested session", async () => {
@@ -107,8 +125,11 @@ describe("verifyTOTP for signed-in credential management", () => {
     });
   });
 
-  test("rejects a legacy query that does not match its cookie-derived session", async () => {
-    const result = await verifyTOTP(CODE, undefined, "other@example.com", ORGANIZATION_ID);
+  test.each([
+    ["login name", "other@example.com", ORGANIZATION_ID],
+    ["organization", LOGIN_NAME, "other-organization"],
+  ])("rejects a legacy %s that does not match its cookie-derived session", async (_, loginName, organization) => {
+    const result = await verifyTOTP(CODE, undefined, loginName, organization);
 
     expect(result).toEqual({ error: expect.any(String) });
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
@@ -123,8 +144,12 @@ describe("verifyTOTP for signed-in credential management", () => {
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
   });
 
-  test("rejects caller-supplied account identifiers that do not match the selected session", async () => {
-    const result = await verifyTOTP(CODE, SESSION_ID, "other@example.com", "other-organization");
+  test.each([
+    ["login name", "other@example.com", ORGANIZATION_ID],
+    ["organization", LOGIN_NAME, "other-organization"],
+    ["login name and organization", "other@example.com", "other-organization"],
+  ])("rejects a caller-supplied %s that does not match the selected session", async (_, loginName, organization) => {
+    const result = await verifyTOTP(CODE, SESSION_ID, loginName, organization);
 
     expect(result).toEqual({ error: expect.any(String) });
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
@@ -137,6 +162,7 @@ describe("verifyTOTP for signed-in credential management", () => {
 
     expect(result).toEqual({ error: expect.any(String) });
     expect(mocks.getSession).not.toHaveBeenCalled();
+    expect(mocks.getMostRecentCookieWithLoginname).not.toHaveBeenCalled();
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
   });
 
@@ -163,6 +189,11 @@ describe("verifyTOTP for signed-in credential management", () => {
 
     expect(result).toEqual({ error: expect.any(String) });
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+    expect(mocks.listAuthenticationMethodTypes).toHaveBeenCalledWith({
+      serviceConfig: SERVICE_CONFIG,
+      userId: USER_ID,
+    });
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
   });
 
   test("rejects TOTP registration when the selected account policy disables OTP", async () => {
@@ -171,6 +202,113 @@ describe("verifyTOTP for signed-in credential management", () => {
     const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
 
     expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("rejects a selected cookie whose id does not match the returned session", async () => {
+    mocks.getSessionCookieById.mockResolvedValue({ id: "another-cookie-session", token: SESSION_TOKEN });
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.listAuthenticationMethodTypes).not.toHaveBeenCalled();
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("rejects a fallback session whose id does not match the selected signed cookie", async () => {
+    useSession(session({ id: "another-session" }));
+
+    const result = await verifyTOTP(CODE, undefined, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.listAuthenticationMethodTypes).not.toHaveBeenCalled();
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("allows first-time enrollment with no existing methods and a valid signed verification proof", async () => {
+    useSession(identifyOnlySession());
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mocks.checkUserVerification.mockResolvedValue(true);
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toBe(RPC_RESULT);
+    expect(mocks.listAuthenticationMethodTypes).toHaveBeenCalledWith({
+      serviceConfig: SERVICE_CONFIG,
+      userId: USER_ID,
+    });
+    expect(mocks.checkUserVerification).toHaveBeenCalledWith(USER_ID);
+    expect(mocks.getLoginSettings).toHaveBeenCalledWith({
+      serviceConfig: SERVICE_CONFIG,
+      organization: ORGANIZATION_ID,
+    });
+    expect(mocks.verifyTOTPRegistration).toHaveBeenCalledWith({
+      serviceConfig: SERVICE_CONFIG,
+      code: CODE,
+      userId: USER_ID,
+    });
+  });
+
+  test("rejects identify-only enrollment without a valid signed verification proof", async () => {
+    useSession(identifyOnlySession());
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: "User Verification Check has to be done" });
+    expect(mocks.checkUserVerification).toHaveBeenCalledWith(USER_ID);
+    expect(mocks.getLoginSettings).not.toHaveBeenCalled();
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("does not use another user's verification proof for the selected account", async () => {
+    useSession(identifyOnlySession());
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mocks.checkUserVerification.mockImplementation(async (userId: string) => userId === "another-user");
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: "User Verification Check has to be done" });
+    expect(mocks.checkUserVerification).toHaveBeenCalledWith(USER_ID);
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("rejects identify-only enrollment with existing methods even when a signed proof is available", async () => {
+    useSession(identifyOnlySession());
+    mocks.checkUserVerification.mockResolvedValue(true);
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: "You have to authenticate or have a valid User Verification Check" });
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
+    expect(mocks.getLoginSettings).not.toHaveBeenCalled();
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("does not allow a signed verification proof to revive an expired onboarding session", async () => {
+    useSession(identifyOnlySession({ expirationDate: timestamp(-3600) }));
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mocks.checkUserVerification.mockResolvedValue(true);
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.checkUserVerification).not.toHaveBeenCalled();
+    expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("still enforces OTP policy after signed-proof onboarding authorization", async () => {
+    useSession(identifyOnlySession());
+    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
+    mocks.checkUserVerification.mockResolvedValue(true);
+    mocks.getLoginSettings.mockResolvedValue({ secondFactors: [] });
+
+    const result = await verifyTOTP(CODE, SESSION_ID, LOGIN_NAME, ORGANIZATION_ID);
+
+    expect(result).toEqual({ error: "Authenticator app verification is not allowed by the login policy" });
+    expect(mocks.checkUserVerification).toHaveBeenCalledWith(USER_ID);
     expect(mocks.verifyTOTPRegistration).not.toHaveBeenCalled();
   });
 });

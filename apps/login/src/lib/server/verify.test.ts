@@ -1,17 +1,25 @@
+import { create } from "@zitadel/client";
+import { FactorsSchema, SessionSchema } from "@zitadel/proto/zitadel/session/v2/session_pb";
+import { GetSessionResponseSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
+import { LoginSettingsSchema, SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
+import { VerifyTOTPRegistrationResponseSchema } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { sendVerification, trySendVerification } from "./verify";
+import { sendVerification, trySendVerification, verifyTOTP } from "./verify";
 
 import {
   createInviteCode,
+  getLoginSettings,
   getSession,
   getUserByID,
   listAuthenticationMethodTypes,
   verifyEmail,
+  verifyTOTPRegistration,
   sendEmailCode as zitadelSendEmailCode,
 } from "@/lib/zitadel";
-import { cookies } from "next/headers";
-import { getSessionCookieByLoginName } from "../cookies";
+import { cookies, headers } from "next/headers";
+import { getMostRecentCookieWithLoginname, getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
 import { createSessionAndUpdateCookie } from "./cookie";
+import { getEnrollmentAuthorizationError } from "./enrollment-guard";
 
 // Mock dependencies
 vi.mock("@/lib/zitadel", () => ({
@@ -23,6 +31,11 @@ vi.mock("@/lib/zitadel", () => ({
   getLoginSettings: vi.fn(),
   sendEmailCode: vi.fn(),
   createInviteCode: vi.fn(),
+  verifyTOTPRegistration: vi.fn(),
+}));
+
+vi.mock("./enrollment-guard", () => ({
+  getEnrollmentAuthorizationError: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({
@@ -31,6 +44,8 @@ vi.mock("next/headers", () => ({
 }));
 
 vi.mock("../cookies", () => ({
+  getMostRecentCookieWithLoginname: vi.fn(),
+  getSessionCookieById: vi.fn(),
   getSessionCookieByLoginName: vi.fn(),
 }));
 
@@ -42,8 +57,8 @@ vi.mock("../service-url", () => ({
   getServiceConfig: vi.fn(() => ({ serviceConfig: {} })),
 }));
 
-vi.mock("../fingerprint", () => ({
-  getOrSetFingerprintId: vi.fn(),
+vi.mock("../verification-check", () => ({
+  setUserVerificationCheckCookie: vi.fn(),
 }));
 
 vi.mock("./host", () => ({
@@ -122,6 +137,9 @@ describe("sendVerification", () => {
     expect(mockGetSession).toHaveBeenCalled();
     // Verify creation was attempted
     expect(mockCreateSessionAndUpdateCookie).toHaveBeenCalled();
+    // The signed verification check is issued for the verified user
+    const { setUserVerificationCheckCookie } = await import("../verification-check");
+    expect(setUserVerificationCheckCookie).toHaveBeenCalledWith("user-1");
   });
 
   test("should include requestId in /authenticator/set redirect when provided", async () => {
@@ -342,5 +360,141 @@ describe("trySendVerification", () => {
     });
 
     expect(result).toBe(false);
+  });
+});
+
+describe("verifyTOTP", () => {
+  const mockGetSession = vi.mocked(getSession);
+  const mockGetSessionCookieById = vi.mocked(getSessionCookieById);
+  const mockGetMostRecentCookieWithLoginname = vi.mocked(getMostRecentCookieWithLoginname);
+  const mockGetLoginSettings = vi.mocked(getLoginSettings);
+  const mockVerifyTOTPRegistration = vi.mocked(verifyTOTPRegistration);
+  const mockGetEnrollmentAuthorizationError = vi.mocked(getEnrollmentAuthorizationError);
+
+  const sessionCookie = {
+    id: "session-1",
+    token: "session-token",
+    loginName: "victim@example.com",
+    organization: "org-1",
+    creationTs: "",
+    expirationTs: "",
+    changeTs: "",
+  };
+  const totpUser = { id: "victim-1", loginName: "victim@example.com", organizationId: "org-1" };
+  const totpSession = create(SessionSchema, { id: "session-1", factors: { user: totpUser } });
+  const registrationResult = create(VerifyTOTPRegistrationResponseSchema, {});
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(headers).mockResolvedValue(new Headers());
+
+    mockGetSessionCookieById.mockResolvedValue(sessionCookie);
+    mockGetMostRecentCookieWithLoginname.mockResolvedValue(sessionCookie);
+    mockGetSession.mockResolvedValue(create(GetSessionResponseSchema, { session: totpSession }));
+    mockGetEnrollmentAuthorizationError.mockResolvedValue(null);
+    mockGetLoginSettings.mockResolvedValue(create(LoginSettingsSchema, { secondFactors: [SecondFactorType.OTP] }));
+    mockVerifyTOTPRegistration.mockResolvedValue(registrationResult);
+  });
+
+  test("rejects TOTP enrollment on an unauthenticated (identify-only) session", async () => {
+    mockGetEnrollmentAuthorizationError.mockResolvedValue(
+      "You have to authenticate or have a valid User Verification Check",
+    );
+
+    const result = await verifyTOTP("123456", "session-1", "victim@example.com", "org-1");
+
+    expect(result).toEqual({ error: "You have to authenticate or have a valid User Verification Check" });
+    expect(mockGetEnrollmentAuthorizationError).toHaveBeenCalledWith({
+      serviceConfig: {},
+      session: totpSession,
+      userId: "victim-1",
+    });
+    expect(mockGetLoginSettings).not.toHaveBeenCalled();
+    expect(mockVerifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("verifies TOTP registration when the selected cookie-bound session is authorized", async () => {
+    const result = await verifyTOTP("123456", "session-1", "victim@example.com", "org-1");
+
+    expect(mockGetSessionCookieById).toHaveBeenCalledWith({ sessionId: "session-1" });
+    expect(mockGetMostRecentCookieWithLoginname).not.toHaveBeenCalled();
+    expect(mockGetSession).toHaveBeenCalledWith({
+      serviceConfig: {},
+      sessionId: "session-1",
+      sessionToken: "session-token",
+    });
+    expect(mockGetLoginSettings).toHaveBeenCalledWith({ serviceConfig: {}, organization: "org-1" });
+    expect(mockVerifyTOTPRegistration).toHaveBeenCalledWith({
+      serviceConfig: {},
+      code: "123456",
+      userId: "victim-1",
+    });
+    expect(result).toEqual(registrationResult);
+  });
+
+  test("uses the login and organization cookie fallback only when no session id is provided", async () => {
+    const result = await verifyTOTP("123456", undefined, "victim@example.com", "org-1");
+
+    expect(result).toEqual(registrationResult);
+    expect(mockGetSessionCookieById).not.toHaveBeenCalled();
+    expect(mockGetMostRecentCookieWithLoginname).toHaveBeenCalledWith({
+      loginName: "victim@example.com",
+      organization: "org-1",
+    });
+    expect(mockGetSession).toHaveBeenCalledWith({
+      serviceConfig: {},
+      sessionId: "session-1",
+      sessionToken: "session-token",
+    });
+  });
+
+  test.each([
+    { name: "session id", session: { ...totpSession, id: "another-session" } },
+    {
+      name: "login name",
+      session: create(SessionSchema, {
+        ...totpSession,
+        factors: create(FactorsSchema, { user: { ...totpUser, loginName: "another@example.com" } }),
+      }),
+    },
+    {
+      name: "organization",
+      session: create(SessionSchema, {
+        ...totpSession,
+        factors: create(FactorsSchema, { user: { ...totpUser, organizationId: "another-organization" } }),
+      }),
+    },
+  ])("rejects a returned session whose $name is not bound to the request", async ({ session }) => {
+    mockGetSession.mockResolvedValue(create(GetSessionResponseSchema, { session }));
+
+    const result = await verifyTOTP("123456", "session-1", "victim@example.com", "org-1");
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(mockGetEnrollmentAuthorizationError).not.toHaveBeenCalled();
+    expect(mockVerifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("rejects a missing selected cookie without falling back to another account", async () => {
+    mockGetSessionCookieById.mockResolvedValue(undefined);
+
+    const result = await verifyTOTP("123456", "session-1", "victim@example.com", "org-1");
+
+    expect(result).toEqual({ error: "Could not find the requested session" });
+    expect(mockGetMostRecentCookieWithLoginname).not.toHaveBeenCalled();
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockGetEnrollmentAuthorizationError).not.toHaveBeenCalled();
+    expect(mockVerifyTOTPRegistration).not.toHaveBeenCalled();
+  });
+
+  test("rejects a session with no user id", async () => {
+    mockGetSession.mockResolvedValue(
+      create(GetSessionResponseSchema, { session: create(SessionSchema, { id: "session-1", factors: {} }) }),
+    );
+
+    const result = await verifyTOTP("123456");
+
+    expect(result).toEqual({ error: "Could not determine user from session" });
+    expect(mockGetEnrollmentAuthorizationError).not.toHaveBeenCalled();
+    expect(mockVerifyTOTPRegistration).not.toHaveBeenCalled();
   });
 });

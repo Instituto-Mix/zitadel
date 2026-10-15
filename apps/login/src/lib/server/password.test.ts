@@ -1,6 +1,6 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ClassifiedConnectError } from "../grpc/interceptors/error-classification";
 import { changePassword, checkSessionAndSetPassword, resetPassword, sendPassword } from "./password";
 
@@ -64,6 +64,15 @@ vi.mock("../verify-helper", () => ({
 vi.mock("../client", () => ({
   completeFlowOrGetUrl: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.stubEnv("ZITADEL_PUBLIC_HOST", undefined);
+  vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("checkSessionAndSetPassword", () => {
   let mockHeaders: any;
@@ -462,22 +471,87 @@ describe("resetPassword", () => {
   let mockSearchUsers: any;
   let mockGetLoginSettings: any;
   let mockPasswordReset: any;
+  let mockGetTranslations: any;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     const { headers } = await import("next/headers");
+    const { getTranslations } = await import("next-intl/server");
     const { getServiceConfig } = await import("../service-url");
     const { getLoginSettings, passwordReset, searchUsers } = await import("../zitadel");
 
     mockHeaders = vi.mocked(headers);
+    mockGetTranslations = vi.mocked(getTranslations);
     mockGetServiceConfig = vi.mocked(getServiceConfig);
     mockSearchUsers = vi.mocked(searchUsers);
     mockGetLoginSettings = vi.mocked(getLoginSettings);
     mockPasswordReset = vi.mocked(passwordReset);
 
     mockHeaders.mockResolvedValue({ get: vi.fn(() => "example.com") });
+    mockGetTranslations.mockResolvedValue((key: string) => key);
     mockGetServiceConfig.mockReturnValue({ serviceConfig: { baseUrl: "https://api.example.com" } });
+  });
+
+  test("should pin the password reset URL to the trusted public host and base path despite poisoned headers", async () => {
+    vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br");
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/ui/v2/login");
+    mockHeaders.mockResolvedValue(
+      new Headers({
+        "x-zitadel-public-host": "public.attacker.example",
+        "x-zitadel-forward-host": "forward.attacker.example",
+        "x-forwarded-host": "proxy.attacker.example",
+        host: "host.attacker.example",
+      }),
+    );
+    mockGetLoginSettings.mockResolvedValue({
+      hidePasswordReset: false,
+      disableLoginWithEmail: true,
+      disableLoginWithPhone: true,
+    });
+    mockSearchUsers.mockResolvedValue({
+      result: [
+        {
+          userId: "user123",
+          preferredLoginName: "user@example.com",
+          details: { resourceOwner: "org123" },
+          type: { case: "human", value: { email: { email: "user@example.com", isVerified: true } } },
+        },
+      ],
+    });
+    mockPasswordReset.mockResolvedValue({});
+
+    const result = await resetPassword({
+      loginName: "user@example.com",
+      organization: "org123",
+      requestId: "request123",
+    });
+
+    expect(result).toEqual({});
+    expect(mockPasswordReset).toHaveBeenCalledExactlyOnceWith({
+      serviceConfig: { baseUrl: "https://api.example.com" },
+      userId: "user123",
+      urlTemplate:
+        "https://entrar.institutomix.com.br/ui/v2/login/password/set?code={{.Code}}&userId={{.UserID}}&organization={{.OrgID}}&requestId=request123",
+    });
+  });
+
+  test("should return translated password reset not allowed error when hidePasswordReset is true", async () => {
+    mockGetLoginSettings.mockResolvedValue({ hidePasswordReset: true });
+    mockGetTranslations.mockResolvedValue((key: string) => {
+      if (key === "errors.passwordResetNotAllowed") {
+        return "translated-password-reset-not-allowed";
+      }
+      return key;
+    });
+
+    const result = await resetPassword({
+      loginName: "user@example.com",
+    });
+
+    expect(result).toEqual({ error: "translated-password-reset-not-allowed" });
+    expect(mockSearchUsers).not.toHaveBeenCalled();
+    expect(mockPasswordReset).not.toHaveBeenCalled();
   });
 
   test("should return generic success when user not found and ignoreUnknownUsernames is true", async () => {

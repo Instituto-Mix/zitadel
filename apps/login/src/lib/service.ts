@@ -2,6 +2,7 @@ import { createClientFor } from "@zitadel/client";
 import { AppService } from "@zitadel/proto/zitadel/app/v2beta/app_service_pb";
 import { AuthorizationService } from "@zitadel/proto/zitadel/authorization/v2/authorization_service_pb";
 import { IdentityProviderService } from "@zitadel/proto/zitadel/idp/v2/idp_service_pb";
+import { InternalPermissionService } from "@zitadel/proto/zitadel/internal_permission/v2/internal_permission_service_pb";
 import { OIDCService } from "@zitadel/proto/zitadel/oidc/v2/oidc_service_pb";
 import { OrganizationService } from "@zitadel/proto/zitadel/org/v2/org_service_pb";
 import { SAMLService } from "@zitadel/proto/zitadel/saml/v2/saml_service_pb";
@@ -21,7 +22,8 @@ type ServiceClass =
   | typeof SessionService
   | typeof OIDCService
   | typeof SettingsService
-  | typeof SAMLService;
+  | typeof SAMLService
+  | typeof InternalPermissionService;
 
 export async function createServiceForHost<T extends ServiceClass>(service: T, serviceConfig: ServiceConfig) {
   let token;

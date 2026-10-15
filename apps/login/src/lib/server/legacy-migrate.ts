@@ -82,6 +82,7 @@ export async function legacyMigratePassword({
     const response = await fetch(`${backendUrl.replace(/\/$/, "")}/auth/legacy-migrate`, {
       method: "POST",
       headers: {
+        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
         // Bypass the ngrok free-tier browser interstitial for API calls.
         "ngrok-skip-browser-warning": "1",

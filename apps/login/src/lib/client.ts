@@ -12,11 +12,11 @@ type FinishFlowCommand =
     }
   | { loginName: string };
 
-function goToSignedInPage(
+function goToPage(
+  path: string,
   props:
     | { sessionId: string; organization?: string; requestId?: string }
     | { organization?: string; loginName: string; requestId?: string },
-  path: string = "/signedin",
 ) {
   const params = new URLSearchParams({});
 
@@ -43,7 +43,7 @@ function goToSignedInPage(
 /**
  * Complete authentication flow or get next URL for navigation
  * - For OIDC/SAML flows with sessionId+requestId: completes flow directly via server action
- * - For device flows: returns URL to signed-in page
+ * - For device flows: returns URL to explicit consent
  * - For other cases: returns default redirect or fallback URL
  */
 export async function completeFlowOrGetUrl(
@@ -78,7 +78,7 @@ export async function completeFlowOrGetUrl(
 }
 
 /**
- * for client: redirects user back to device flow completion, default redirect, or success page
+ * for client: redirects user to device consent, default redirect, or success page
  * Note: OIDC/SAML flows now use completeAuthFlowAction() instead of URL navigation
  * @param command
  * @returns
@@ -89,13 +89,13 @@ export async function getNextUrl(
 ): Promise<string> {
   console.log("getNextUrl called with:", command, "defaultRedirectUri:", defaultRedirectUri);
 
-  // finish Device Authorization Flow
+  // ask for consent before the Device Authorization Flow is completed
   if (
     "requestId" in command &&
     command.requestId.startsWith("device_") &&
     ("loginName" in command || "sessionId" in command)
   ) {
-    const result = goToSignedInPage({
+    const result = goToPage("/device/consent", {
       ...command,
       organization: command.organization,
     });
@@ -115,7 +115,7 @@ export async function getNextUrl(
  * Resolves the redirect URI based on the following priority:
  * 1. DEFAULT_REDIRECT_URI environment variable
  * 2. defaultRedirectUri from organization settings
- * 3. Relative signed-in page fallback
+ * 3. Relative applications page fallback
  * 4. Reserved for future extensions
  */
 export async function resolveRedirectUri(command: FinishFlowCommand, defaultRedirectUri?: string): Promise<string> {
@@ -150,7 +150,7 @@ export async function resolveRedirectUri(command: FinishFlowCommand, defaultRedi
   }
 
   // 3. Default post-login page (relative): the app launcher
-  const result = goToSignedInPage(command, "/apps");
-  console.log("resolveRedirectUri: Using relative goToSignedInPage result:", result);
+  const result = goToPage("/apps", command);
+  console.log("resolveRedirectUri: Using relative applications page result:", result);
   return result;
 }

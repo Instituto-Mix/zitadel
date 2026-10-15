@@ -116,6 +116,22 @@ describe("legacyMigratePassword", () => {
     expect(JSON.parse(init.body)).toEqual({ login_name: "user@example.com", password: "secret" });
   });
 
+  it("serializes the migration request as application/json with the unchanged credentials", async () => {
+    const fetchMock = mockFetch(200, OK_BODY);
+
+    await legacyMigratePassword({ loginName: "migration-fixture@example.com", password: "fictional-erp-password" });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const request = new Request(url, init);
+    expect(request.headers.get("authorization")).toBe("Bearer access-token");
+    expect(request.headers.has("x-zitadel-service-account")).toBe(false);
+    expect(request.headers.get("content-type")).toBe("application/json");
+    await expect(request.json()).resolves.toEqual({
+      login_name: "migration-fixture@example.com",
+      password: "fictional-erp-password",
+    });
+  });
+
   it("does not call the backend when it is not configured", async () => {
     const fetchMock = mockFetch(200, OK_BODY);
     delete process.env.AUTH_BACKEND_URL;

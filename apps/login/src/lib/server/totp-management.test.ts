@@ -81,6 +81,8 @@ describe("removeManagedTOTP", () => {
     const result = await removeManagedTOTP(SESSION_ID);
 
     expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    expect(mocks.getMostRecentCookieWithLoginname).not.toHaveBeenCalled();
     expect(mocks.removeTOTP).not.toHaveBeenCalled();
   });
 
@@ -90,6 +92,32 @@ describe("removeManagedTOTP", () => {
     const result = await removeManagedTOTP(SESSION_ID);
 
     expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.removeTOTP).not.toHaveBeenCalled();
+  });
+
+  test("rejects a different session returned for the selected signed cookie", async () => {
+    useSession(
+      authenticatedSession({
+        id: "another-session",
+        factors: {
+          user: { id: "another-user", organizationId: "another-org" },
+          password: { verifiedAt: timestamp() },
+          totp: { verifiedAt: timestamp() },
+        },
+      }),
+    );
+
+    const result = await removeManagedTOTP(SESSION_ID);
+
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(mocks.getSessionCookieById).toHaveBeenCalledWith({ sessionId: SESSION_ID });
+    expect(mocks.getSession).toHaveBeenCalledWith({
+      serviceConfig: SERVICE_CONFIG,
+      sessionId: SESSION_ID,
+      sessionToken: SESSION_COOKIE.token,
+    });
+    expect(mocks.getLoginSettings).not.toHaveBeenCalled();
+    expect(mocks.listAuthenticationMethodTypes).not.toHaveBeenCalled();
     expect(mocks.removeTOTP).not.toHaveBeenCalled();
   });
 
@@ -164,6 +192,7 @@ describe("removeManagedTOTP", () => {
 
     const result = await removeManagedTOTP(SESSION_ID);
 
+    expect(mocks.getSessionCookieById).toHaveBeenCalledWith({ sessionId: SESSION_ID });
     expect(mocks.getSession).toHaveBeenCalledWith({
       serviceConfig: SERVICE_CONFIG,
       sessionId: SESSION_ID,
@@ -171,9 +200,7 @@ describe("removeManagedTOTP", () => {
     });
     expect(result).toEqual({ success: true });
     expect(mocks.removeTOTP).toHaveBeenCalledTimes(1);
-    expect(mocks.removeTOTP).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceConfig: SERVICE_CONFIG, userId: SESSION_USER_ID }),
-    );
+    expect(mocks.removeTOTP).toHaveBeenCalledWith({ serviceConfig: SERVICE_CONFIG, userId: SESSION_USER_ID });
   });
 
   test("does not report removal or call UserService when TOTP is not configured", async () => {

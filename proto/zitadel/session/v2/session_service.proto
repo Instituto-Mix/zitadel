@@ -7,7 +7,6 @@ import "zitadel/object/v2/object.proto";
 import "zitadel/protoc_gen_zitadel/v2/options.proto";
 import "zitadel/session/v2/challenge.proto";
 import "zitadel/session/v2/session.proto";
-import "zitadel/error/v2/error.proto";
 import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/protobuf/struct.proto";
@@ -258,11 +257,6 @@ service SessionService {
   // Required permissions:
   //   - `session.delete`
   //   - no permission required for own sessions or when providing the current session token
-  //
-  // Possible error slugs include (non-exhaustive):
-  //   - "request.invalid" when required fields such as the session ID are missing or invalid
-  //   - "auth.missing_permission" when the caller does not have the required permissions to delete the session
-  //   - "session.token_invalid" when the provided session token is invalid
   rpc DeleteSession (DeleteSessionRequest) returns (DeleteSessionResponse) {
     option (google.api.http) = {
       delete: "/v2/sessions/{session_id}"
@@ -621,11 +615,11 @@ message CheckIDPIntent {
 
   // The token of the idp intent, previously returned on the success response of the IDP callback.
   string idp_intent_token = 2 [
-    (validate.rules).string = {min_len: 1, max_len: 200},
+    (validate.rules).string = {min_len: 1, max_len: 500},
     (google.api.field_behavior) = REQUIRED,
     (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_field) = {
       min_length: 1;
-      max_length: 200;
+      max_length: 500;
       example: "\"SJKL3ioIDpo342ioqw98fjp3sdf32wahb=\"";
     }
   ];
