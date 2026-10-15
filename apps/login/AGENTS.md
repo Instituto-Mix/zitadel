@@ -57,6 +57,12 @@ The **Login App** (`apps/login`) provides the user interface for authentication 
   packages. A newer peer resolution can produce incompatible RPC descriptor types;
   do not update shared packages to bypass this project's boundary.
 
+## Base Path & Redirects (critical — read before touching any redirect logic)
+- **The login app is served under a non-root base path in production.** ZITADEL Cloud and the official container image are built with `NEXT_PUBLIC_BASE_PATH=/ui/v2/login` (see `apps/login/.env`; the value is inlined at build time by Next.js). Never assume the app lives at the domain root.
+- **`constructUrl()` (`src/lib/service-url.ts`) prepends the base path and must ONLY ever receive root-relative paths** (`/loginname`, `/password?...`). Passing an absolute URL glues the base path onto it and produces a broken redirect like `https://<host>/ui/v2/loginhttps://login.microsoftonline.com/...`.
+- **Some redirect targets ARE absolute URLs**: IdP authorize URLs returned by `startIdentityProviderFlow`, OIDC callback URLs from `createCallback`, and SAML endpoints from `createResponse`. When handling a redirect value that could be absolute, branch on `isExternalUrl()` first, validate absolute URLs with `isSafeRedirectUri()`, and pass them to `NextResponse.redirect` (server) / `window.location.href` (client) untouched. Canonical pattern: `resolveLoginHint` in `src/lib/server/flow-initiation.ts` and `handleServerActionResponse` in `src/lib/client-utils.ts`.
+- **An empty base path masks this whole bug class**: with `NEXT_PUBLIC_BASE_PATH` unset, `new URL("" + absoluteUrl, origin)` still parses the absolute URL correctly, so local setups without the base path won't reproduce base-path bugs. Always test redirect changes with `NEXT_PUBLIC_BASE_PATH=/ui/v2/login` set, and verify the raw `Location` header (e.g. `curl -I`), not just browser behavior.
+
 ## Verified Nx Targets
 - **Dev Server**: `pnpm nx run @zitadel/login:dev`
 - **Build**: `pnpm nx run @zitadel/login:build`

@@ -158,6 +158,29 @@ describe("managed passkey actions", () => {
     expect(removePasskey).not.toHaveBeenCalled();
   });
 
+  test("rejects a different session returned for the selected signed cookie", async () => {
+    const response = sessionResponse();
+    response.session.id = "another-session";
+    response.session.factors.user.id = "another-user";
+    setSessionResponse(response);
+
+    const listResult = await listManagedPasskeys(sessionId);
+    const removeResult = await removeManagedPasskey(sessionId, firstPasskey.id);
+
+    expect(listResult).toMatchObject({ error: expect.any(String) });
+    expect(removeResult).toMatchObject({ error: expect.any(String) });
+    expect(getSessionCookieById).toHaveBeenCalledWith({ sessionId });
+    expect(getSession).toHaveBeenCalledWith({
+      serviceConfig: expect.anything(),
+      sessionId,
+      sessionToken,
+    });
+    expect(getLoginSettings).not.toHaveBeenCalled();
+    expect(listAuthenticationMethodTypes).not.toHaveBeenCalled();
+    expect(listPasskeys).not.toHaveBeenCalled();
+    expect(removePasskey).not.toHaveBeenCalled();
+  });
+
   test("rejects passkey management when WebAuthn is recent but not user-verified", async () => {
     const store = installPasskeyStore({ [sessionUserId]: [firstPasskey] });
     setSessionResponse(sessionResponse({ verifiedFactor: "passkey", userVerified: false }));
@@ -180,6 +203,7 @@ describe("managed passkey actions", () => {
     const result = await listManagedPasskeys(sessionId);
 
     expect(result).toEqual({ passkeys: [firstPasskey] });
+    expect(listPasskeys).toHaveBeenCalledWith({ serviceConfig: expect.anything(), userId: sessionUserId });
   });
 
   test("returns an empty passkey list for an account with no passkeys", async () => {
@@ -261,6 +285,11 @@ describe("managed passkey actions", () => {
 
     expect(result).toEqual({ success: true });
     expect(remaining).toEqual({ passkeys: [] });
+    expect(removePasskey).toHaveBeenCalledWith({
+      serviceConfig: expect.anything(),
+      userId: sessionUserId,
+      passkeyId: firstPasskey.id,
+    });
   });
 
   test("releases the removal lock after a passkey API failure", async () => {

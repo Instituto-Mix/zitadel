@@ -12,7 +12,6 @@ import {
   verifyTOTPRegistration,
   sendEmailCode as zitadelSendEmailCode,
 } from "@/lib/zitadel";
-import crypto from "crypto";
 
 import { create, timestampDate } from "@zitadel/client";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
@@ -20,27 +19,17 @@ import { ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_
 import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { getTranslations } from "next-intl/server";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { completeFlowOrGetUrl } from "../client";
 import { getMostRecentCookieWithLoginname, getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
-import { getOrSetFingerprintId } from "../fingerprint";
 import { checkMFAFactors } from "../mfa-helper";
 import { getServiceConfig } from "../service-url";
+import { setUserVerificationCheckCookie } from "../verification-check";
 import { createSessionAndUpdateCookie } from "./cookie";
+import { getEnrollmentAuthorizationError } from "./enrollment-guard";
 import { getPublicHostWithProtocol } from "./host";
 
 const logger = createLogger("verify");
-
-function isSessionValidForTOTPVerification(session: Session): boolean {
-  const hasVerifiedFactor = Boolean(
-    session.factors?.password?.verifiedAt ||
-    (session.factors?.webAuthN?.verifiedAt && session.factors?.webAuthN?.userVerified) ||
-    session.factors?.intent?.verifiedAt,
-  );
-  const isUnexpired = !session.expirationDate || timestampDate(session.expirationDate) > new Date();
-
-  return hasVerifiedFactor && isUnexpired;
-}
 
 export async function verifyTOTP(code: string, sessionId?: string, loginName?: string, organization?: string) {
   const _headers = await headers();
@@ -74,8 +63,17 @@ export async function verifyTOTP(code: string, sessionId?: string, loginName?: s
     return { error: "The session does not match the requested account" };
   }
 
-  if (!isSessionValidForTOTPVerification(session)) {
+  if (session.expirationDate && timestampDate(session.expirationDate) <= new Date()) {
     return { error: "A current, verified session is required to verify an authenticator" };
+  }
+
+  const enrollmentError = await getEnrollmentAuthorizationError({
+    serviceConfig,
+    session,
+    userId: user.id,
+  });
+  if (enrollmentError) {
+    return { error: enrollmentError };
   }
 
   const loginSettings = await getLoginSettings({ serviceConfig, organization: user.organizationId });
@@ -197,19 +195,9 @@ export async function sendVerification(command: VerifyUserByEmailCommand) {
       params.set("requestId", command.requestId);
     }
 
-    // set hash of userId and userAgentId to prevent attacks, checks are done for users with invalid sessions and invalid userAgentId
-    const cookiesList = await cookies();
-    const userAgentId = await getOrSetFingerprintId();
-
-    const verificationCheck = crypto.createHash("sha256").update(`${user.userId}:${userAgentId}`).digest("hex");
-
-    await cookiesList.set({
-      name: "verificationCheck",
-      value: verificationCheck,
-      httpOnly: true,
-      path: "/",
-      maxAge: 300, // 5 minutes
-    });
+    // remember the successful verification for this browser (signed with a server-only secret),
+    // checks are done for users with invalid sessions and invalid userAgentId
+    await setUserVerificationCheckCookie(user.userId);
 
     return { redirect: `/authenticator/set?${params}` };
   }

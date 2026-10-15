@@ -10,7 +10,7 @@ import {
   registerPasskey,
   verifyPasskeyRegistration as zitadelVerifyPasskeyRegistration,
 } from "@/lib/zitadel";
-import { create, Duration, Timestamp, timestampDate } from "@zitadel/client";
+import { create, Duration, timestampDate } from "@zitadel/client";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
 import { Checks, ChecksSchema, GetSessionResponse } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
 import {
@@ -23,9 +23,10 @@ import { userAgent } from "next/server";
 import { completeFlowOrGetUrl } from "../client";
 import { getSessionCookieById, getSessionCookieByLoginName } from "../cookies";
 import { getServiceConfig } from "../service-url";
-import { isSessionValid as isLoginSessionValid } from "../session";
-import { checkEmailVerification, checkUserVerification } from "../verify-helper";
+import { hasVerifiedPrimaryFactor, isSessionValid as isLoginSessionValid } from "../session";
+import { checkEmailVerification } from "../verify-helper";
 import { createSessionAndUpdateCookie } from "./cookie";
+import { getEnrollmentAuthorizationError } from "./enrollment-guard";
 import { getPublicHost } from "./host";
 import { updateOrCreateSession } from "./session";
 
@@ -45,21 +46,6 @@ type RegisterPasskeyCommand = {
   code?: string;
   codeId?: string;
 };
-
-function isSessionValid(session: Partial<Session>): {
-  valid: boolean;
-  verifiedAt?: Timestamp;
-} {
-  const validPassword = session?.factors?.password?.verifiedAt;
-  const validPasskey = session?.factors?.webAuthN?.verifiedAt;
-  const validIDP = session?.factors?.intent?.verifiedAt;
-  const stillValid = session.expirationDate ? timestampDate(session.expirationDate) > new Date() : true;
-
-  const verifiedAt = validPassword || validPasskey || validIDP;
-  const valid = !!((validPassword || validPasskey || validIDP) && stillValid);
-
-  return { valid, verifiedAt };
-}
 
 export async function registerPasskeyLink(
   command: RegisterPasskeyCommand,
@@ -81,7 +67,7 @@ export async function registerPasskeyLink(
     // Session-based flow (existing logic)
     const sessionCookie = await getSessionCookieById({ sessionId: command.sessionId });
 
-    if (!sessionCookie) {
+    if (!sessionCookie || sessionCookie.id !== command.sessionId) {
       return { error: "Could not get session cookie" };
     }
 
@@ -96,33 +82,25 @@ export async function registerPasskeyLink(
 
     currentUserId = session.session.factors.user.id;
 
-    const sessionValid = isSessionValid(session.session);
+    const enrollmentError = await getEnrollmentAuthorizationError({
+      serviceConfig,
+      session: session.session,
+      userId: currentUserId,
+    });
 
-    if (sessionValid.verifiedAt) {
-      if (session.session.factors?.webAuthN?.verifiedAt && !session.session.factors.webAuthN.userVerified) {
-        return { error: "You have to authenticate or have a valid User Verification Check" };
-      }
+    if (enrollmentError) {
+      return { error: enrollmentError };
+    }
 
-      if (!(await isLoginSessionValid({ serviceConfig, session: session.session }))) {
-        return { error: "You have to authenticate or have a valid User Verification Check" };
-      }
-    } else {
-      const authmethods = await listAuthenticationMethodTypes({ serviceConfig, userId: currentUserId });
+    if (session.session.factors?.webAuthN?.verifiedAt && !session.session.factors.webAuthN.userVerified) {
+      return { error: "You have to authenticate or have a valid User Verification Check" };
+    }
 
-      // if the user has no authmethods set, we need to check if the user was verified
-      if (authmethods.authMethodTypes.length !== 0) {
-        return {
-          error: "You have to authenticate or have a valid User Verification Check",
-        };
-      }
-
-      // check if a verification was done earlier
-      const hasValidUserVerificationCheck = await checkUserVerification(currentUserId);
-
-      logger.info("hasValidUserVerificationCheck", { hasValidUserVerificationCheck });
-      if (!hasValidUserVerificationCheck) {
-        return { error: "User Verification Check has to be done" };
-      }
+    if (
+      hasVerifiedPrimaryFactor(session.session).verifiedAt &&
+      !(await isLoginSessionValid({ serviceConfig, session: session.session }))
+    ) {
+      return { error: "You have to authenticate or have a valid User Verification Check" };
     }
 
     // Generate registration code if not provided
@@ -229,7 +207,7 @@ export async function verifyPasskeyRegistration(command: VerifyPasskeyCommand) {
     });
   }
 
-  if (!sessionCookie) {
+  if (!sessionCookie || (command.sessionId && sessionCookie.id !== command.sessionId)) {
     throw new Error("Could not get session cookie");
   }
 
@@ -264,13 +242,21 @@ export async function verifyPasskeyRegistration(command: VerifyPasskeyCommand) {
     );
     const isSessionUnexpired = !session.expirationDate || timestampDate(session.expirationDate).getTime() > Date.now();
 
-    if (!command.userId || hasPrimaryFactor || !isSessionUnexpired) {
+    if (hasPrimaryFactor || !isSessionUnexpired) {
       throw new Error("You have to authenticate or have a valid User Verification Check");
     }
 
-    const authMethods = await listAuthenticationMethodTypes({ serviceConfig, userId: currentUserId });
-    if (authMethods.authMethodTypes.length !== 0) {
-      throw new Error("You have to authenticate or have a valid User Verification Check");
+    if (command.userId) {
+      // ZITADEL validated the emailed registration code when it created the WebAuthn challenge.
+      const authMethods = await listAuthenticationMethodTypes({ serviceConfig, userId: currentUserId });
+      if (authMethods.authMethodTypes.length !== 0) {
+        throw new Error("You have to authenticate or have a valid User Verification Check");
+      }
+    } else {
+      const enrollmentError = await getEnrollmentAuthorizationError({ serviceConfig, session, userId: currentUserId });
+      if (enrollmentError) {
+        throw new Error(enrollmentError);
+      }
     }
   }
 

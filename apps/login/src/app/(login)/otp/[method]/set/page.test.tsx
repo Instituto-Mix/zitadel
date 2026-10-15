@@ -1,5 +1,6 @@
+import { signSession } from "@/lib/session-cookie-signature";
 import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import Page from "./page";
 
 const mocks = vi.hoisted(() => ({
@@ -97,7 +98,7 @@ function authenticatedSession({
 
 function useSessions(...entries: SessionEntry[]) {
   const sessionByToken = Object.fromEntries(entries.map(({ cookie, session }) => [cookie.token, session]));
-  const serializedCookies = JSON.stringify(entries.map(({ cookie }) => cookie));
+  const serializedCookies = JSON.stringify(entries.map(({ cookie }) => signSession(cookie)));
 
   mocks.cookies.mockResolvedValue({
     get: (name: string) => (name === "sessions" ? { value: serializedCookies } : undefined),
@@ -146,6 +147,7 @@ const legacyAccountParams = {
 describe("TOTP registration route authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("ZITADEL_SESSION_COOKIE_SECRET", "test-session-cookie-secret-at-least-32-chars");
 
     mocks.headers.mockResolvedValue(new Headers());
     mocks.getServiceConfig.mockReturnValue({ serviceConfig: SERVICE_CONFIG });
@@ -158,6 +160,10 @@ describe("TOTP registration route authorization", () => {
     mocks.registerTOTP.mockResolvedValue({ uri: "otpauth://totp/account", secret: "totp-secret" });
 
     useSessions({ cookie: selectedCookie(), session: selectedSession() });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   test("registers TOTP for the account in the selected session", async () => {

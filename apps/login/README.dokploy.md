@@ -170,6 +170,7 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 |---|---|---|
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
+| `ZITADEL_SESSION_COOKIE_SECRET` | recommended | Dedicated runtime secret for signed session cookies and verification/IdP-link proofs. Each value must contain at least 32 characters. All replicas must use identical values. See rotation below. |
 | `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password — see above). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
 | `AUTH_BACKEND_CLIENT_ID`, `AUTH_BACKEND_CLIENT_SECRET`, `AUTH_BACKEND_AUDIENCE` | for Track B | Dedicated Zitadel machine-user client credentials and the backend project audience scope (`urn:zitadel:iam:org:project:id:<project-id>:aud`). Login v2 exchanges them server-side for a short-lived Bearer token for both backend endpoints. Never use a user PAT or static access token. |
 | `EMAIL_VERIFICATION` | no | `true`/`false`. Gates login on verifying a real unverified address, so it needs working SMTP. The undeliverable `invalido.troque` placeholder is exempt either way. |
@@ -179,6 +180,47 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 The public domain is resolved at runtime from the `Host` / `X-Forwarded-Host` header
 that Dokploy's reverse proxy sets — no domain env var is needed at runtime (only the
 build-time `SERVER_ACTION_ALLOWED_ORIGINS` above).
+
+### Session cookie signing and rotation
+
+Generate a dedicated secret privately:
+
+```sh
+openssl rand -base64 32
+```
+
+Put the generated value in Dokploy's runtime Environment field as `ZITADEL_SESSION_COOKIE_SECRET`.
+Do not put it in Build Args, source control, logs, or the image.
+The entrypoint passes runtime environment variables to the Node server without an allowlist.
+No Dockerfile or entrypoint change is needed for this variable.
+
+Cookies and proofs are signed, not encrypted. Signing detects changes but does not hide their contents.
+The app signs `sessions` cookie entries, the `verificationCheck` cookie, and IdP-link `linkFingerprint` proofs.
+If any configured nonempty secret contains fewer than 32 characters, signing fails and `/ready` returns HTTP 503.
+The app does not fall back to an API credential for an invalid short secret.
+If the variable is unset or empty, the app uses the API credential as a deprecated fallback and logs a warning.
+Configure a dedicated secret rather than relying on that fallback.
+
+For rotation, set a comma-separated list in `new,old` order, with actual generated secrets instead of those labels.
+The first value signs new cookies and proofs. All listed values can verify existing signatures.
+Use the identical ordered list on every replica.
+For rolling deployments, first distribute `old,new` to every replica, then switch all replicas to `new,old`.
+Remove the old value only when signatures that depend on it no longer need to work.
+
+On the first deployment of this upgrade, unsigned cookies and proofs are no longer accepted.
+Users in a passkey, verification, or IdP-link step must repeat that step after deployment.
+Existing unsigned Login UI sessions can require sign-in again.
+The existing in-memory first-access ticket constraint stays unchanged.
+A restart still drops first-access tickets, so affected users must re-enter their ERP password.
+Sharing this signing secret does not share tickets or remove the single-instance constraints documented above.
+
+### Upgrade compatibility
+
+Tested backend range:
+
+`Zitadel server v4.19.5` — tested image digest: `ghcr.io/zitadel/zitadel@sha256:a586456a208e0db4c633db0ba43c427c24b37846138b8b13ff16ad8e003a18d3` (smoke-tested 2026-10-15 against this Login build: username, email and CPF login, password reset, passkey and TOTP setup, first access, logout; ERP resolver stubbed).
+
+The release Login image tag and digest are produced by the `build-login-image` workflow after merge; record them here at release.
 
 ### With Track B enabled, run the login app single-instance (or with session affinity)
 
