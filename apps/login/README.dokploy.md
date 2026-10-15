@@ -26,9 +26,10 @@ backend instead.
 1. The user types their `loginName` and their **ERP** password. Zitadel's own password
    check fails (there is no Zitadel password yet).
 2. Only if the user has **no** `PASSWORD` auth method, the app POSTs
-   `{login_name, password}` to `{AUTH_BACKEND_URL}/auth/legacy-migrate`. A `200` means
-   the ERP digest matched and carries a **password-reset code**; `409` (already has a
-   password) and `403` (anything else) are deliberately indistinguishable to the user.
+   `{login_name, password}` to `{AUTH_BACKEND_URL}/auth/legacy-migrate` with
+   `Content-Type: application/json`. A `200` means the ERP digest matched and carries
+   a **password-reset code**; `409` (already has a password) and `403` (anything else)
+   are deliberately indistinguishable to the user.
 3. The ERP password is **proof of identity only — it is never installed**. The ERP
    stores an unsalted MD5 that cannot be inspected or reversed, so there is no way to
    know whether it satisfies Zitadel's complexity policy, and most legacy passwords do
@@ -39,6 +40,13 @@ backend instead.
    separate forced-change screen.
 4. The app then signs the user in with the newly chosen password and continues the
    normal session/MFA/redirect flow.
+
+A backend validation `400` is a request-format error, not the credential outcomes
+`403` or `409`. The missing header previously caused Node to serialize the JSON string
+as `text/plain;charset=UTF-8`, which the backend rejected with validation `400`.
+Historical logs show five resolver `200`/migration `400` sequences, but their exact
+request bodies were not captured. This defect does not prove the cause of every
+historical failure.
 
 On the login-name and password screens, Enter submits the same form as Continue,
 including the existing validation and sign-in flow.
