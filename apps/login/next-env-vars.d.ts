@@ -17,6 +17,13 @@ declare namespace NodeJS {
     ZITADEL_API_URL: string;
 
     /**
+     * Optional: Pin the browser-facing host (hostname and optional port, no protocol/path).
+     * Unset or empty preserves request-header-based public host resolution.
+     * Does not change the API instance host or the configured base path.
+     */
+    ZITADEL_PUBLIC_HOST?: string;
+
+    /**
      * The service account token
      * If ZITADEL_SERVICE_USER_TOKEN is set, its value is used.
      * If ZITADEL_SERVICE_USER_TOKEN is not set but ZITADEL_SERVICE_USER_TOKEN_FILE is set, the application blocks until the file is created.

@@ -17,7 +17,7 @@ export function getInstanceHost(headers: ReadonlyHeaders): string | null {
 
 /**
  * Gets the public host that the user sees in their browser URL.
- * Only considers standard proxy headers (x-forwarded-host and host).
+ * Uses ZITADEL_PUBLIC_HOST when configured; otherwise resolves forwarded headers and host.
  * Does NOT include x-zitadel-instance-host.
  *
  * Use this when you need the public-facing host that the user actually sees,
@@ -27,6 +27,11 @@ export function getInstanceHost(headers: ReadonlyHeaders): string | null {
  * @throws Error if no host is found
  */
 export function getPublicHost(headers: ReadonlyHeaders): string {
+  // Standalone deployments can pin their public host without trusting request headers.
+  if (process.env.ZITADEL_PUBLIC_HOST) {
+    return process.env.ZITADEL_PUBLIC_HOST;
+  }
+
   // Only use standard proxy headers (x-zitadel-public-host → x-zitadel-forward-host → x-forwarded-host → host)
   // Do NOT use x-zitadel-instance-host as it may differ from what the user sees
   const publicHost =

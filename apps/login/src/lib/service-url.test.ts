@@ -3,19 +3,20 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { constructUrl, getServiceConfig } from "./service-url";
 
 describe("Service URL utilities", () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    vi.stubEnv("ZITADEL_PUBLIC_HOST", undefined);
+    vi.stubEnv("ZITADEL_API_URL", undefined);
+    vi.stubEnv("ZITADEL_INSTANCE_HOST", undefined);
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    vi.unstubAllEnvs();
   });
 
   describe("getServiceConfig", () => {
     test("should throw when ZITADEL_API_URL is not set", () => {
-      process.env.ZITADEL_API_URL = undefined as any;
+      vi.stubEnv("ZITADEL_API_URL", undefined);
 
       const mockHeaders = {
         get: vi.fn(() => null),
@@ -28,7 +29,7 @@ describe("Service URL utilities", () => {
     // (the instance's own domain), NOT the browser Host, and publicHost is omitted
     // so Zitadel skips its trusted-domain check. See getServiceConfig comments.
     test("derives instanceHost from ZITADEL_API_URL and omits publicHost", () => {
-      process.env.ZITADEL_API_URL = "https://id.institutomix.com.br";
+      vi.stubEnv("ZITADEL_API_URL", "https://id.institutomix.com.br");
 
       const mockHeaders = {
         get: vi.fn((key: string) => {
@@ -47,7 +48,7 @@ describe("Service URL utilities", () => {
     });
 
     test("strips protocol and any trailing path/slash from ZITADEL_API_URL", () => {
-      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud/";
+      vi.stubEnv("ZITADEL_API_URL", "https://api.zitadel.cloud/");
 
       const mockHeaders = { get: vi.fn(() => null) } as any;
 
@@ -57,7 +58,7 @@ describe("Service URL utilities", () => {
     });
 
     test("does not depend on the request Host header", () => {
-      process.env.ZITADEL_API_URL = "https://api.zitadel.cloud";
+      vi.stubEnv("ZITADEL_API_URL", "https://api.zitadel.cloud");
 
       // No host headers at all — must still resolve the instance from the API URL.
       const mockHeaders = { get: vi.fn(() => null) } as any;
@@ -68,8 +69,8 @@ describe("Service URL utilities", () => {
     });
 
     test("ZITADEL_INSTANCE_HOST overrides the instance host (parent domain for WebAuthn RP ID)", () => {
-      process.env.ZITADEL_API_URL = "https://id.institutomix.com.br";
-      process.env.ZITADEL_INSTANCE_HOST = "institutomix.com.br";
+      vi.stubEnv("ZITADEL_API_URL", "https://id.institutomix.com.br");
+      vi.stubEnv("ZITADEL_INSTANCE_HOST", "institutomix.com.br");
 
       const mockHeaders = { get: vi.fn(() => null) } as any;
 
@@ -80,7 +81,7 @@ describe("Service URL utilities", () => {
     });
 
     test("keeps a port present in ZITADEL_API_URL", () => {
-      process.env.ZITADEL_API_URL = "http://localhost:8080";
+      vi.stubEnv("ZITADEL_API_URL", "http://localhost:8080");
 
       const mockHeaders = { get: vi.fn(() => null) } as any;
 
@@ -91,8 +92,25 @@ describe("Service URL utilities", () => {
   });
 
   describe("constructUrl", () => {
+    test("should construct a trusted redirect with a pinned host and base path despite poisoned headers", () => {
+      vi.stubEnv("ZITADEL_PUBLIC_HOST", "entrar.institutomix.com.br");
+      vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/ui/v2/login");
+      const mockRequest = new NextRequest("https://host.attacker.example/ui/v2/login", {
+        headers: {
+          "x-zitadel-public-host": "public.attacker.example",
+          "x-zitadel-forward-host": "forward.attacker.example",
+          "x-forwarded-host": "proxy.attacker.example",
+          host: "host.attacker.example",
+        },
+      });
+
+      const result = constructUrl(mockRequest, "/password?requestId=request123");
+
+      expect(result.href).toBe("https://entrar.institutomix.com.br/ui/v2/login/password?requestId=request123");
+    });
+
     test("should construct URL with x-zitadel-forward-host when present", () => {
-      process.env.NEXT_PUBLIC_BASE_PATH = "";
+      vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
       const mockRequest = {
         headers: {
           get: vi.fn((key: string) => {
@@ -114,7 +132,7 @@ describe("Service URL utilities", () => {
     });
 
     test("should fall back to x-forwarded-host when x-zitadel-forward-host is not present", () => {
-      process.env.NEXT_PUBLIC_BASE_PATH = "";
+      vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
       const mockRequest = {
         headers: {
           get: vi.fn((key: string) => {
@@ -177,7 +195,7 @@ describe("Service URL utilities", () => {
     });
 
     test("should include base path when NEXT_PUBLIC_BASE_PATH is set", () => {
-      process.env.NEXT_PUBLIC_BASE_PATH = "/login";
+      vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/login");
 
       const mockRequest = {
         headers: {
