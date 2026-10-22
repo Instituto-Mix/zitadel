@@ -178,7 +178,7 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 |---|---|---|
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
-| `ZITADEL_SESSION_COOKIE_SECRET` | recommended | Dedicated runtime secret for signed session cookies and verification/IdP-link proofs. Each value must contain at least 32 characters. All replicas must use identical values. See rotation below. |
+| `ZITADEL_SESSION_COOKIE_SECRET` | recommended | Dedicated runtime secret for signed session cookies and verification, IdP-link and device-code proofs. Each value must contain at least 32 characters. All replicas must use identical values. See rotation below. |
 | `ZITADEL_PUBLIC_HOST` | recommended | Pins the public host (`hostname[:port]`, no scheme/path) used for login-generated links (reset, verification, invite, IdP callbacks, OTP email template) and WebAuthn domains, ignoring `x-zitadel-public-host`, `x-zitadel-forward-host`, `x-forwarded-host` and `Host`. Unset/empty keeps header-based resolution. It does not sanitize headers forwarded to the Zitadel API or caller-supplied templates, so keep ingress header sanitisation too. Set to `entrar.institutomix.com.br` in production. |
 | `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password — see above). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
 | `AUTH_BACKEND_CLIENT_ID`, `AUTH_BACKEND_CLIENT_SECRET`, `AUTH_BACKEND_AUDIENCE` | for Track B | Dedicated Zitadel machine-user client credentials and the backend project audience scope (`urn:zitadel:iam:org:project:id:<project-id>:aud`). Login v2 exchanges them server-side for a short-lived Bearer token for both backend endpoints. Never use a user PAT or static access token. |
@@ -204,7 +204,7 @@ The entrypoint passes runtime environment variables to the Node server without a
 No Dockerfile or entrypoint change is needed for this variable.
 
 Cookies and proofs are signed, not encrypted. Signing detects changes but does not hide their contents.
-The app signs `sessions` cookie entries, the `verificationCheck` cookie, and IdP-link `linkFingerprint` proofs.
+The app signs `sessions` cookie entries, the `verificationCheck` cookie, IdP-link `linkFingerprint` proofs, and (since v4.20.0) the `deviceCodeCheck` cookie that binds a device-authorization user code to the browser.
 If any configured nonempty secret contains fewer than 32 characters, signing fails and `/ready` returns HTTP 503.
 The app does not fall back to an API credential for an invalid short secret.
 If the variable is unset or empty, the app uses the API credential as a deprecated fallback and logs a warning.
@@ -222,6 +222,7 @@ Existing unsigned Login UI sessions can require sign-in again.
 The existing in-memory first-access ticket constraint stays unchanged.
 A restart still drops first-access tickets, so affected users must re-enter their ERP password.
 Sharing this signing secret does not share tickets or remove the single-instance constraints documented above.
+Device authorization (v4.20.0): the `deviceCodeCheck` cookie changed from an unsigned SHA-256 to a signed 5-minute proof, so device codes entered before the deployment are rejected and users must re-enter the code. Ordinary sessions are unaffected.
 
 ### Upgrade compatibility
 

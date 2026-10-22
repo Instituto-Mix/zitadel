@@ -3,6 +3,10 @@
 ## Context
 The **Login App** (`apps/login`) provides the user interface for authentication flows (Login, Register, MFA, etc.). It is built with Next.js and React.
 
+## Priority
+Entrar Login v2 is this fork's deployment target; see root `AGENTS.md` for scope.
+The hard project boundary and authorization requirements below still apply.
+
 ## Hard project boundary
 - **Edit only `apps/login/**`.** Do not modify, generate files in, stage, or resolve
   merge conflicts in any other part of the ZITADEL repository, including root

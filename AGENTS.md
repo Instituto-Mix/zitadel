@@ -10,6 +10,15 @@ self-hosted **Login v2 app (`apps/login`)**, extended with the legacy-identifier
 login feature (Track B — tax number / secondary legacy username → canonical
 Zitadel loginName). See `apps/login/README.dokploy.md`.
 
+**Priority:** this repo primarily ships the customized **Entrar Login v2**
+(`https://entrar.institutomix.com.br`). Treat all other upstream code as
+occasional **read-only scouting**, never as implicit work. A request about
+upstream impact or updates means Login v2 only: answer and implement for it,
+without surveying unrelated systems (backend, console, other deployments).
+Routine scope restatements are unnecessary; edit-scope, authorization and
+verification requirements are unchanged, and `apps/login/AGENTS.md` governs
+edit permission.
+
 **When syncing / updating code from the upstream repo, only care about the login
 app and its direct build dependencies. Ignore everything else.**
 
