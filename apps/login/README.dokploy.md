@@ -277,6 +277,89 @@ container run --rm -p 3000:3000 \
 The server listens on port **3000**. Health endpoint: **`/ready`** (or
 `<NEXT_PUBLIC_BASE_PATH>/ready` if a base path was set). A `HEALTHCHECK` is baked in.
 
+### Entrar release playbook
+
+Use this procedure for an authorized release to Entrar. A push to `main` that
+changes `apps/login/**` triggers `.github/workflows/build-login-image.yml`.
+The workflow also triggers for the other paths listed in that file. GitHub
+builds and pushes `ghcr.io/instituto-mix/im-login:latest` and a short SHA tag.
+The workflow then calls a stored secret webhook. Dokploy pulls the image through
+the application's Docker source. A successful workflow alone does not prove that
+the new image is running.
+
+1. Read `skill://dokploy-api` and use its installed scripts from the skill
+   directory. List configured targets with `uv run python scripts/target_config.py list`.
+   Do not read the raw target registry. Use `--target im-01-im` on every
+   Dokploy call, not the default `im-01-infra`. Make sure that the selected panel
+   is `srv-im-01.institutomix.com.br`.
+2. List the projects and discover the live API contracts:
+
+   ```sh
+   bash scripts/dokploy-api.sh --target im-01-im GET project.all
+   uv run python scripts/discover-operation.py --target im-01-im --search application.one
+   uv run python scripts/discover-operation.py --target im-01-im --tag deployment
+   ```
+
+   Find the Authentication project, production environment, and Entrar
+   application in the returned data. Resolve the application ID from the live
+   response. `aPBdINMoghBZeoGqeDDVe` is an example, not a substitute for
+   discovery. Set `APP_ID` to the discovered ID, then use the live request
+   contracts:
+
+   ```sh
+   bash scripts/dokploy-api.sh --target im-01-im GET "application.one?applicationId=$APP_ID"
+   bash scripts/dokploy-api.sh --target im-01-im GET "deployment.all?applicationId=$APP_ID"
+   uv run python scripts/discover-operation.py --target im-01-im --search docker.getContainersByAppNameMatch
+   uv run python scripts/discover-operation.py --target im-01-im --search docker.getConfig
+   ```
+
+   Confirm the Docker source and expected image. The Git branch trigger belongs
+   to the GitHub workflow, not a Dokploy Git-provider binding. Discover and use
+   the applicable container and image GET contracts before inspecting runtime
+   state. Do not expose secret or environment values.
+3. Before the Git change, record the latest deployment ID and status by
+   `createdAt`, not by the order of an unsorted response. Record the active
+   container image ID and OCI revision label as the runtime baseline. Wait for
+   active builds and deployments to finish before releasing another commit.
+   Stop and report any failure or state that you cannot establish.
+4. Obtain explicit authority to commit and push or merge into `main`. Integrate
+   the approved changes with a clean fast-forward of `main`. Do not force-push,
+   bypass administrator controls, or change repository policies. If a clean
+   fast-forward is not possible, stop and report the gate.
+5. Set `COMMIT_SHA` to the full pushed commit SHA. From the repository, find the
+   run for that exact commit. Set `RUN_ID` to the matching run ID and watch it:
+
+   ```sh
+   gh run list --workflow build-login-image.yml --branch main --commit "$COMMIT_SHA" --json databaseId,headSha,status,conclusion,url
+   gh run watch "$RUN_ID" --exit-status
+   ```
+
+   Make sure that the run's `headSha` equals the pushed SHA. A successful run
+   means the webhook request succeeded, not that the deployment finished.
+6. Read `deployment.all` again and find the new deployment after the baseline.
+   Use the live deployment status and log contracts to monitor it. After a
+   terminal success, inspect the actual container and its image. Compare the
+   container's OCI revision with the full pushed SHA. Compare its image ID with
+   the baseline and record its health. Make sure that the new deployment,
+   image ID, revision, and health support the release result. Report failures,
+   mismatches, and pending states instead of claiming success.
+7. Request `https://entrar.institutomix.com.br/ready` and report the HTTP result.
+   Perform a credential-free browser smoke test with synthetic values only.
+   Make sure that Show password and Hide password preserve the value and support
+   keyboard activation. Do not submit the live form. A local, isolated
+   form-submission test does not prove a real account login.
+
+Do not call `application.deploy` for an ordinary Git-triggered release. Do not
+make manual deployments or environment changes without separate approval for
+the exact action. After an unknown write outcome, read the resource and
+deployment state before any retry, then ask for further authority. Report the
+Git, workflow, deployment, runtime, readiness, and smoke-test gates separately.
+Do not publish tokens, webhook URLs, environment values, or internal terminal
+handles in release reports.
+
+The local build instructions above describe an alternative image build. The
+Entrar application normally pulls the image built by GitHub.
+
 ### Dokploy service settings
 
 - **Dockerfile path:** `Dockerfile.dokploy`
