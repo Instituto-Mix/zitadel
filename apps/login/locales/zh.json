@@ -64,6 +64,8 @@
     "verify": {
       "title": "密码",
       "description": "请输入您的密码。",
+      "showPassword": "显示密码",
+      "hidePassword": "隐藏密码",
       "resetPassword": "重置密码",
       "submit": "继续",
       "labels": {

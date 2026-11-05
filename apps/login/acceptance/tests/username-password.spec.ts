@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { test as base } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import dotenv from "dotenv";
 import path from "path";
 import { loginScreenExpect, loginWithPassword, startLogin } from "./login";
@@ -33,6 +33,34 @@ const test = base.extend<{ user: PasswordUser }>({
 
 test("username and password login", async ({ user, page }) => {
   await loginWithPassword(page, user.getUsername(), user.getPassword());
+  await loginScreenExpect(page, user.getFullName());
+});
+
+test("password visibility toggle supports keyboard without submitting", async ({ user, page }) => {
+  await startLogin(page);
+  await loginname(page, user.getUsername());
+
+  const input = page.getByTestId("password-text-input");
+  await expect(input).toHaveAttribute("type", "password");
+  await input.fill(user.getPassword());
+  await input.focus();
+  const passwordUrl = page.url();
+  await page.keyboard.press("Tab");
+  const show = page.getByRole("button", { name: "Show password", exact: true });
+  await expect(show).toBeFocused();
+  await expect(show).toHaveAttribute("type", "button");
+  await page.keyboard.press("Enter");
+  await expect(input).toHaveAttribute("type", "text");
+  await expect(input).toHaveValue(user.getPassword());
+  await expect(page.getByRole("button", { name: "Hide password", exact: true })).toBeFocused();
+  await expect(page).toHaveURL(passwordUrl);
+  await page.keyboard.press("Space");
+  await expect(input).toHaveAttribute("type", "password");
+  await expect(input).toHaveValue(user.getPassword());
+  await expect(show).toBeFocused();
+  await expect(page).toHaveURL(passwordUrl);
+
+  await page.getByTestId("submit-button").click();
   await loginScreenExpect(page, user.getFullName());
 });
 

@@ -64,6 +64,8 @@
     "verify": {
       "title": "Password",
       "description": "Inserisci la tua password.",
+      "showPassword": "Mostra password",
+      "hidePassword": "Nascondi password",
       "resetPassword": "Reimposta Password",
       "submit": "Continua",
       "labels": {

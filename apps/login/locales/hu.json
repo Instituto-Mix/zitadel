@@ -64,6 +64,8 @@
     "verify": {
       "title": "Jelszó",
       "description": "Add meg a jelszavadat.",
+      "showPassword": "Jelszó megjelenítése",
+      "hidePassword": "Jelszó elrejtése",
       "resetPassword": "Jelszó visszaállítása",
       "submit": "Tovább",
       "labels": {

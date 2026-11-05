@@ -36,6 +36,7 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
 
   const t = useTranslations("password");
 
+  const [showPassword, setShowPassword] = useState(false);
   const [info, setInfo] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [samlData, setSamlData] = useState<{ url: string; fields: Record<string, string> } | null>(null);
@@ -114,7 +115,7 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
       <form className="w-full" onSubmit={handleSubmit(submitPassword)}>
         <div className={`${error && "animate-shake transform-gpu"}`}>
           <TextInput
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete="password"
             autoFocus
             {...register("password", { required: t("verify.required.password") })}
@@ -129,6 +130,13 @@ export function PasswordForm({ loginSettings, loginName, organization, defaultOr
             label={t("verify.labels.password")}
             data-testid="password-text-input"
           />
+          <button
+            className="hover:text-primary-light-500 dark:hover:text-primary-dark-500 me-4 text-sm transition-all"
+            onClick={() => setShowPassword((visible) => !visible)}
+            type="button"
+          >
+            {t(showPassword ? "verify.hidePassword" : "verify.showPassword")}
+          </button>
           {!loginSettings?.hidePasswordReset && (
             <button
               className="hover:text-primary-light-500 dark:hover:text-primary-dark-500 text-sm transition-all"

@@ -64,6 +64,8 @@
     "verify": {
       "title": "Senha",
       "description": "Insira sua senha.",
+      "showPassword": "Mostrar senha",
+      "hidePassword": "Ocultar senha",
       "resetPassword": "Redefinir Senha",
       "submit": "Continuar",
       "labels": {

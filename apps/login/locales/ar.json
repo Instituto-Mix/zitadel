@@ -64,6 +64,8 @@
     "verify": {
       "title": "كلمة المرور",
       "description": "أدخل كلمة المرور الخاصة بك.",
+      "showPassword": "إظهار كلمة المرور",
+      "hidePassword": "إخفاء كلمة المرور",
       "resetPassword": "إعادة تعيين كلمة المرور",
       "submit": "متابعة",
       "labels": {

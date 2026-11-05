@@ -64,6 +64,8 @@
     "verify": {
       "title": "Hasło",
       "description": "Wprowadź swoje hasło.",
+      "showPassword": "Pokaż hasło",
+      "hidePassword": "Ukryj hasło",
       "resetPassword": "Zresetuj hasło",
       "submit": "Kontynuuj",
       "labels": {

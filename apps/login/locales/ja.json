@@ -57,6 +57,8 @@
     "verify": {
       "title": "パスワード",
       "description": "パスワードを入力してください。",
+      "showPassword": "パスワードを表示",
+      "hidePassword": "パスワードを非表示",
       "resetPassword": "パスワードをリセット",
       "submit": "続行",
       "labels": {

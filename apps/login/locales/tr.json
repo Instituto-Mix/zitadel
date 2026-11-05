@@ -64,6 +64,8 @@
     "verify": {
       "title": "Şifre",
       "description": "Şifrenizi girin.",
+      "showPassword": "Şifreyi göster",
+      "hidePassword": "Şifreyi gizle",
       "resetPassword": "Şifreyi Sıfırla",
       "submit": "Devam",
       "labels": {

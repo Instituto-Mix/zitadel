@@ -64,6 +64,8 @@
     "verify": {
       "title": "Wachtwoord",
       "description": "Voer jouw wachtwoord in.",
+      "showPassword": "Wachtwoord tonen",
+      "hidePassword": "Wachtwoord verbergen",
       "resetPassword": "Wachtwoord resetten",
       "submit": "Verder",
       "labels": {

@@ -51,6 +51,10 @@ historical failure.
 On the login-name and password screens, Enter submits the same form as Continue,
 including the existing validation and sign-in flow.
 
+The sign-in password starts hidden. Show password and Hide password change only
+its visibility and preserve the entered value. Both actions support keyboard
+activation and do not submit the form. The action labels use the selected language.
+
 Dependency checks use pnpm: run `pnpm --filter @zitadel/login outdated --format json`
 and `pnpm audit --json` from the repository root. The audit covers the workspace;
 inspect `apps__login>` paths separately. Login uses Next.js 16.3.8 and Vitest 4.1.11
