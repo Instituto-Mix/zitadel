@@ -171,15 +171,21 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
 | `AUTH_BACKEND_URL` | for Track B | Backend base URL, including the version prefix. Used for `/auth/resolve` (legacy identifier → canonical `loginName`) and `/auth/legacy-migrate` (first access via the legacy ERP password — see above). If unset, both are skipped: login still works with real `loginName`s and existing Zitadel passwords (fail-open), but provisioned users cannot complete a first access. |
+| `ZITADEL_PUBLIC_HOST` | recommended | Optional runtime public-host pin for email templates and redirects. For Entrar, set `entrar.institutomix.com.br` (optionally `:port`), with no protocol or path. When set, it takes precedence over `Host`, `X-Forwarded-Host`, `X-Zitadel-Public-Host`, and `X-Zitadel-Forward-Host`; API configuration, base path, and allowed origins are unchanged. |
 | `AUTH_BACKEND_CLIENT_ID`, `AUTH_BACKEND_CLIENT_SECRET`, `AUTH_BACKEND_AUDIENCE` | for Track B | Dedicated Zitadel machine-user client credentials and the backend project audience scope (`urn:zitadel:iam:org:project:id:<project-id>:aud`). Login v2 exchanges them server-side for a short-lived Bearer token for both backend endpoints. Never use a user PAT or static access token. |
 | `EMAIL_VERIFICATION` | no | `true`/`false`. Gates login on verifying a real unverified address, so it needs working SMTP. The undeliverable `invalido.troque` placeholder is exempt either way. |
 | `OTEL_SDK_DISABLED` | no | `true` unless you run an OpenTelemetry collector. |
 | `CSP_FETCH_ENABLED` | no | `false` to skip fetching iframe origins from Zitadel for CSP. |
 
-The public domain is resolved at runtime from the `Host` / `X-Forwarded-Host` header
-that Dokploy's reverse proxy sets — no domain env var is needed at runtime (only the
-build-time `SERVER_ACTION_ALLOWED_ORIGINS` above).
-
+The public domain is otherwise resolved from request headers.
+For Entrar, set `ZITADEL_PUBLIC_HOST=entrar.institutomix.com.br` to pin the public
+host used when constructing email-template URLs and redirects, ignoring
+`X-Zitadel-Public-Host`, `X-Zitadel-Forward-Host`, `X-Forwarded-Host`, and `Host`.
+The value may include a port but must not include a protocol or path. If unset or
+empty, the app retains forwarded/header-derived host behavior, so the ingress must
+sanitize trusted host headers. The pin does not replace ingress allowlists or header
+sanitization, and does not replace Server Actions CSRF protection. `ZITADEL_API_URL`,
+the instance host, base path, and allowed origins remain configured independently.
 ### With Track B enabled, run the login app single-instance (or with session affinity)
 
 First access is two requests: the one that verifies the ERP password and the one that
