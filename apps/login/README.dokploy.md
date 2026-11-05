@@ -190,9 +190,15 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 | `OTEL_SDK_DISABLED` | no | `true` unless you run an OpenTelemetry collector. |
 | `CSP_FETCH_ENABLED` | no | `false` to skip fetching iframe origins from Zitadel for CSP. |
 
-The public domain is resolved at runtime from the `Host` / `X-Forwarded-Host` header
-that Dokploy's reverse proxy sets — no domain env var is needed at runtime (only the
-build-time `SERVER_ACTION_ALLOWED_ORIGINS` above).
+The public domain is otherwise resolved from request headers.
+For Entrar, set `ZITADEL_PUBLIC_HOST=entrar.institutomix.com.br` to pin the public
+host used when constructing email-template URLs and redirects, ignoring
+`X-Zitadel-Public-Host`, `X-Zitadel-Forward-Host`, `X-Forwarded-Host`, and `Host`.
+The value may include a port but must not include a protocol or path. If unset or
+empty, the app retains forwarded/header-derived host behavior, so the ingress must
+sanitize trusted host headers. The pin does not replace ingress allowlists or header
+sanitization, and does not replace Server Actions CSRF protection. `ZITADEL_API_URL`,
+the instance host, base path, and allowed origins remain configured independently.
 
 ### Session cookie signing and rotation
 
