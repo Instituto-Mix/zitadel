@@ -86,6 +86,7 @@
       "title": "Set Password",
       "description": "Set the password for your account",
       "codeSent": "A new code has been sent to your email address.",
+      "codeSentTo": "A new code has been sent to {email}.",
       "noCodeReceived": "Didn't receive a code?",
       "resend": "Resend code",
       "submit": "Continue",
@@ -139,6 +140,7 @@
     "errors": {
       "noHostFound": "No host found",
       "couldNotSendResetLink": "Could not send Password Reset Link",
+      "noUsableResetEmail": "Your account has no valid email address for password reset. Contact support to update your email address.",
       "couldNotCreateSessionForUser": "Could not create session for user",
       "couldNotVerifyPassword": "Could not verify password",
       "failedToAuthenticate": "Failed to authenticate. You had {failedAttempts} of {maxPasswordAttempts} password attempts.{lockoutMessage}",

@@ -57,7 +57,7 @@ activation and do not submit the form. The action labels use the selected langua
 
 Dependency checks use pnpm: run `pnpm --filter @zitadel/login outdated --format json`
 and `pnpm audit --json` from the repository root. The audit covers the workspace;
-inspect `apps__login>` paths separately. Login uses Next.js 16.3.8 and Vitest 4.1.11
+inspect `apps__login>` paths separately. Login uses Next.js 16.4.6 and Vitest 4.1.11
 after security updates. Run `pnpm run build` and `pnpm run test-unit` from
 `apps/login` to validate Login without invoking Nx's shared generation prerequisites.
 
@@ -108,6 +108,37 @@ Passkey removal serializes the last-sign-in-method check and deletion within
 each app process. **Keep Entrar at one instance** for that safeguard: session
 affinity alone does not prevent simultaneous removal requests routed to
 different instances. Reassess the lock before scaling beyond one instance.
+
+### Password reset destination
+
+The reset confirmation can show the registered human user's masked email, for
+example `jef*****@gmail.com`, rather than the identifier entered at sign-in.
+The server reveals at most three leading local-part graphemes, never more than
+half, followed by five asterisks and the full domain. This is a product privacy
+choice, not a universal masking standard; the hint still reveals part of an
+address and does not prove delivery or ownership.
+
+The hint requires available contextual and user-organization login policies,
+password reset visible in both, and an allowed login identifier when supplied.
+It intentionally confirms account existence for resolved users with a usable
+email, even when `ignoreUnknownUsernames` is enabled; that setting does not hide
+this hint. The same eligibility gates apply to direct user-ID links; a code in
+the URL alone is not proof of identity.
+Resolved human users with a missing or empty registered email, or any address at
+the `invalido.troque` placeholder domain, cannot reset their password by email.
+They see a localized support message instead of a sent-code confirmation, with
+no password-reset form or resend controls and no placeholder address displayed.
+This known-account support message remains visible with `ignoreUnknownUsernames`
+enabled, including direct user-ID/code and login-name links.
+Server actions guard both reset-code issuance/resend and code-based password
+redemption, so an existing code cannot bypass this policy. Unknown/nonhuman users
+retain the generic confirmation. This uses the existing usable-email policy,
+not additional email-format validation.
+
+Initial no-code password setup still has no sent-code alert and remains available;
+authenticated password changes and the separate ERP-verified first-access bridge
+(`completeFirstAccess`) are unchanged. The registered destination for permitted
+resets is masked server-side, not added unmasked to client props or URLs.
 
 ---
 

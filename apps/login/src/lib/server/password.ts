@@ -3,6 +3,7 @@
 import { isClassifiedError } from "@/lib/grpc/interceptors/error-classification";
 import { createLogger } from "@/lib/logger";
 import { recordAuthAttempt, recordAuthFailure, recordAuthSuccess } from "@/lib/metrics";
+import { usableEmail } from "@/lib/placeholder-email";
 import { createSessionAndUpdateCookie, setSessionAndUpdateCookie } from "@/lib/server/cookie";
 import {
   discardFirstAccessTicket,
@@ -122,6 +123,10 @@ export async function resetPassword(command: ResetPasswordCommand) {
       }
       return { error: t("errors.couldNotSendResetLink") };
     }
+  }
+
+  if (humanUser && !usableEmail(humanUser.email?.email)) {
+    return { error: t("errors.noUsableResetEmail") };
   }
 
   const userId = user.userId;
@@ -673,6 +678,10 @@ export async function changePassword(command: { code?: string; userId: string; p
 
   if (user.state === UserState.INITIAL) {
     return { error: t("errors.userInitialStateNotSupported") };
+  }
+
+  if (command.code && user.type.case === "human" && !usableEmail(user.type.value.email?.email)) {
+    return { error: t("errors.noUsableResetEmail") };
   }
 
   // check if the user has no password set in order to set a password

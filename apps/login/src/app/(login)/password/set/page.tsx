@@ -4,6 +4,8 @@ import { SetPasswordForm } from "@/components/set-password-form";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { UNKNOWN_USER_ID } from "@/lib/constants";
+import { maskEmail } from "@/lib/mask-email";
+import { usableEmail } from "@/lib/placeholder-email";
 import { getServiceConfig } from "@/lib/service-url";
 import { loadMostRecentSession } from "@/lib/session";
 import {
@@ -95,15 +97,47 @@ export default async function Page(props: { searchParams: Promise<Record<string 
       userId = foundUser.userId;
       user = foundUser;
     } else if (loginSettings?.ignoreUnknownUsernames) {
-      // Prevent enumeration by pretending we found a user
+      // Preserve the generic reset flow for unknown users.
       userId = UNKNOWN_USER_ID;
+    }
+  }
+
+  const noUsableResetEmail = initial !== "true" && user?.type.case === "human" && !usableEmail(user.type.value.email?.email);
+
+  let maskedEmail: string | undefined;
+  if (!initial && !noUsableResetEmail && user?.type.case === "human" && user.details?.resourceOwner) {
+    // Match the reset action's context, not a possibly unrelated recent session.
+    const contextualSettings =
+      !organization && session?.factors?.user?.organizationId
+        ? await getLoginSettings({ serviceConfig, organization: defaultOrganization })
+        : loginSettings;
+    const userSettings = await getLoginSettings({ serviceConfig, organization: user.details.resourceOwner });
+    const human = user.type.value;
+    if (
+      contextualSettings &&
+      userSettings &&
+      [contextualSettings, userSettings].every(
+        (settings) =>
+          !settings.hidePasswordReset &&
+          (!loginName ||
+            user?.preferredLoginName === loginName ||
+            (!settings.disableLoginWithEmail && !settings.disableLoginWithPhone) ||
+            (!settings.disableLoginWithEmail && human.email?.email === loginName) ||
+            (!settings.disableLoginWithPhone && human.phone?.phone === loginName)),
+      )
+    ) {
+      maskedEmail = maskEmail(human.email?.email);
     }
   }
 
   return (
     <DynamicTheme branding={branding}>
       <div className="flex flex-col space-y-4">
-        <h1>{session?.factors?.user?.displayName ?? <Translated i18nKey="set.title" namespace="password" />}</h1>
+        <h1>
+          {(!noUsableResetEmail && session?.factors?.user?.displayName) || (
+            <Translated i18nKey="set.title" namespace="password" />
+          )}
+        </h1>
         <p className="ztdl-p mb-6 block">
           <Translated i18nKey="set.description" namespace="password" />
         </p>
@@ -119,45 +153,57 @@ export default async function Page(props: { searchParams: Promise<Record<string 
           </div>
         )}
 
-        {session ? (
-          <UserAvatar
-            loginName={loginName ?? session.factors?.user?.loginName}
-            displayName={session.factors?.user?.displayName}
-            showDropdown
-            searchParams={searchParams}
-          ></UserAvatar>
-        ) : loginName ? (
-          <UserAvatar loginName={loginName} displayName={loginName} showDropdown searchParams={searchParams}></UserAvatar>
-        ) : null}
+        {!noUsableResetEmail &&
+          (session ? (
+            <UserAvatar
+              loginName={loginName ?? session.factors?.user?.loginName}
+              displayName={session.factors?.user?.displayName}
+              showDropdown
+              searchParams={searchParams}
+            ></UserAvatar>
+          ) : loginName ? (
+            <UserAvatar loginName={loginName} displayName={loginName} showDropdown searchParams={searchParams}></UserAvatar>
+          ) : null)}
       </div>
 
       <div className="w-full">
-        {!initial && (
+        {noUsableResetEmail ? (
           <Alert type={AlertType.INFO}>
-            <Translated i18nKey="set.codeSent" namespace="password" />
+            <Translated i18nKey="errors.noUsableResetEmail" namespace="password" />
           </Alert>
+        ) : (
+          !initial && (
+            <Alert type={AlertType.INFO}>
+              <Translated
+                i18nKey={maskedEmail ? "set.codeSentTo" : "set.codeSent"}
+                namespace="password"
+                data={maskedEmail ? { email: maskedEmail } : undefined}
+              />
+            </Alert>
+          )
         )}
 
-        {passwordComplexity &&
-        (loginName ?? user?.preferredLoginName) &&
-        (userId ?? session?.factors?.user?.id ?? (loginSettings?.ignoreUnknownUsernames ? UNKNOWN_USER_ID : undefined)) ? (
-          <SetPasswordForm
-            code={code}
-            userId={userId ?? (session?.factors?.user?.id as string) ?? UNKNOWN_USER_ID}
-            loginName={loginName ?? (user?.preferredLoginName as string)}
-            requestId={requestId}
-            organization={organization}
-            defaultOrganization={defaultOrganization}
-            passwordComplexitySettings={passwordComplexity}
-            codeRequired={!(initial === "true")}
-          />
-        ) : (
-          <div className="py-4">
-            <Alert>
-              <Translated i18nKey="failedLoading" namespace="error" />
-            </Alert>
-          </div>
-        )}
+        {!noUsableResetEmail &&
+          (passwordComplexity &&
+          (loginName ?? user?.preferredLoginName) &&
+          (userId ?? session?.factors?.user?.id ?? (loginSettings?.ignoreUnknownUsernames ? UNKNOWN_USER_ID : undefined)) ? (
+            <SetPasswordForm
+              code={code}
+              userId={userId ?? (session?.factors?.user?.id as string) ?? UNKNOWN_USER_ID}
+              loginName={loginName ?? (user?.preferredLoginName as string)}
+              requestId={requestId}
+              organization={organization}
+              defaultOrganization={defaultOrganization}
+              passwordComplexitySettings={passwordComplexity}
+              codeRequired={!(initial === "true")}
+            />
+          ) : (
+            <div className="py-4">
+              <Alert>
+                <Translated i18nKey="failedLoading" namespace="error" />
+              </Alert>
+            </div>
+          ))}
       </div>
     </DynamicTheme>
   );

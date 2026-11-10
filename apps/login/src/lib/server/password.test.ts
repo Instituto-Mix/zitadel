@@ -1,7 +1,10 @@
 import { Code, ConnectError } from "@connectrpc/connect";
+import { UserState } from "@zitadel/proto/zitadel/user/v2/user_pb";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ClassifiedConnectError } from "../grpc/interceptors/error-classification";
+import { checkUserVerification } from "../verify-helper";
+import { listAuthenticationMethodTypes } from "../zitadel";
 import { changePassword, checkSessionAndSetPassword, resetPassword, sendPassword } from "./password";
 
 // Mock dependencies
@@ -536,6 +539,28 @@ describe("resetPassword", () => {
     });
   });
 
+  test.each(["legacy@invalido.troque", undefined])(
+    "should block reset delivery for an unusable registered email (%s) even when unknown usernames are ignored",
+    async (email) => {
+      mockGetLoginSettings.mockResolvedValue({ ignoreUnknownUsernames: true });
+      mockSearchUsers.mockResolvedValue({
+        result: [
+          {
+            userId: "user123",
+            preferredLoginName: "legacy-user",
+            details: { resourceOwner: "org123" },
+            type: { case: "human", value: { email: email ? { email } : undefined } },
+          },
+        ],
+      });
+
+      const result = await resetPassword({ loginName: "legacy-user" });
+
+      expect(result).toEqual({ error: "errors.noUsableResetEmail" });
+      expect(mockPasswordReset).not.toHaveBeenCalled();
+    },
+  );
+
   test("should return translated password reset not allowed error when hidePasswordReset is true", async () => {
     mockGetLoginSettings.mockResolvedValue({ hidePasswordReset: true });
     mockGetTranslations.mockResolvedValue((key: string) => {
@@ -603,12 +628,90 @@ describe("changePassword", () => {
     mockGetServiceConfig.mockReturnValue({ serviceConfig: { baseUrl: "https://api.example.com" } });
   });
 
+  test.each(["legacy@invalido.troque", undefined])(
+    "should reject an existing reset code without changing the password for an unusable registered email (%s)",
+    async (email) => {
+      mockGetUserByID.mockResolvedValue({
+        user: {
+          userId: "user123",
+          state: UserState.ACTIVE,
+          type: { case: "human", value: { email: email ? { email } : undefined } },
+        },
+      });
+      mockGetLoginSettings.mockResolvedValue({ ignoreUnknownUsernames: true });
+
+      const result = await changePassword({
+        userId: "user123",
+        code: "existing-reset-code",
+        password: "newpassword",
+      });
+
+      expect(result).toEqual({ error: "errors.noUsableResetEmail" });
+      expect(mockSetUserPassword).not.toHaveBeenCalled();
+    },
+  );
+
+  test("should redeem a reset code for a usable registered email", async () => {
+    mockGetUserByID.mockResolvedValue({
+      user: {
+        userId: "user123",
+        state: UserState.ACTIVE,
+        type: { case: "human", value: { email: { email: "user@example.com" } } },
+      },
+    });
+    mockSetUserPassword.mockResolvedValue({});
+
+    const result = await changePassword({
+      userId: "user123",
+      code: "existing-reset-code",
+      password: "newpassword",
+    });
+
+    expect(result).toEqual({});
+    expect(mockSetUserPassword).toHaveBeenCalledExactlyOnceWith({
+      serviceConfig: { baseUrl: "https://api.example.com" },
+      userId: "user123",
+      password: "newpassword",
+      code: "existing-reset-code",
+    });
+  });
+
+  test.each(["legacy@invalido.troque", undefined])(
+    "should allow verified no-code password setup with an unusable registered email (%s)",
+    async (email) => {
+      mockGetUserByID.mockResolvedValue({
+        user: {
+          userId: "user123",
+          state: UserState.ACTIVE,
+          type: { case: "human", value: { email: email ? { email } : undefined } },
+        },
+      });
+      vi.mocked(listAuthenticationMethodTypes).mockResolvedValue({
+        $typeName: "zitadel.user.v2.ListAuthenticationMethodTypesResponse",
+        authMethodTypes: [],
+      });
+      vi.mocked(checkUserVerification).mockResolvedValue(true);
+      mockSetUserPassword.mockResolvedValue({});
+
+      const result = await changePassword({ userId: "user123", password: "newpassword" });
+
+      expect(result).toEqual({});
+      expect(mockSetUserPassword).toHaveBeenCalledExactlyOnceWith({
+        serviceConfig: { baseUrl: "https://api.example.com" },
+        userId: "user123",
+        password: "newpassword",
+        code: undefined,
+      });
+    },
+  );
+
   test("should return generic error when user not found and ignoreUnknownUsernames is true", async () => {
     mockGetUserByID.mockResolvedValue({}); // User not found
     mockGetLoginSettings.mockResolvedValue({ ignoreUnknownUsernames: true });
 
     const result = await changePassword({
       userId: "unknown",
+      code: "existing-reset-code",
       password: "newpassword",
     });
 
@@ -622,6 +725,7 @@ describe("changePassword", () => {
 
     const result = await changePassword({
       userId: "unknown",
+      code: "existing-reset-code",
       password: "newpassword",
     });
 
