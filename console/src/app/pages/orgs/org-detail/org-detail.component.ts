@@ -33,7 +33,7 @@ export class OrgDetailComponent implements OnInit {
   public PolicyComponentServiceType: any = PolicyComponentServiceType;
 
   public OrganizationState = OrganizationState;
-  public ChangeType: any = ChangeType;
+  public ChangeType = ChangeType;
 
   public metadata: Metadata.AsObject[] = [];
   public loadingMetadata: boolean = true;

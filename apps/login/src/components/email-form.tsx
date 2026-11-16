@@ -1,6 +1,6 @@
 "use client";
 
-import { sendCurrentEmailVerification, updateEmail } from "@/lib/server/email";
+import { sendCurrentEmailVerification, updateEmail } from "@/lib/actions/email";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "NEXT_OUTPUT_MODE=standalone next build && cp -r public scripts/* .next/standalone/ && mv .next/standalone/apps/login/server.js .next/standalone/apps/login/next-server.js && cp .next/standalone/server.mjs .next/standalone/apps/login/server.js && cp -r .next/static .next/standalone/apps/login/.next/ && rm .next/standalone/apps/login/.env",
-    "build-vercel": "next build",
+    "build": "NEXT_OUTPUT_MODE=standalone next build && node checks/server-actions.mjs && cp -r public scripts/* .next/standalone/ && mv .next/standalone/apps/login/server.js .next/standalone/apps/login/next-server.js && cp .next/standalone/server.mjs .next/standalone/apps/login/server.js && cp -r .next/static .next/standalone/apps/login/.next/ && rm .next/standalone/apps/login/.env",
+    "build-vercel": "next build && node checks/server-actions.mjs",
     "dev": "HOSTNAME=127.0.0.1 ./scripts/entrypoint.sh next dev",
     "prod": "cd ./.next/standalone && HOSTNAME=127.0.0.1 ./entrypoint.sh node apps/login/server.js",
     "lint-check-next": "eslint .",
@@ -41,7 +41,6 @@
     "@tailwindcss/forms": "^0.5.11",
     "clsx": "^2.1.1",
     "copy-to-clipboard": "^3.3.3",
-    "deepmerge": "^4.3.1",
     "escape-html": "^1.0.3",
     "lru-cache": "^11.5.3",
     "lucide-react": "^0.577.0",
@@ -62,7 +61,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@faker-js/faker": "^10.6.0",
-    "@next/eslint-plugin-next": "16.3.8",
+    "@next/eslint-plugin-next": "16.4.3",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@otplib/core": "^12.0.1",
@@ -85,7 +84,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@zitadel/client": "workspace:*",
     "@zitadel/proto": "workspace:*",
-    "concurrently": "^10.0.5",
+    "concurrently": "^10.0.6",
     "dotenv-cli": "^11.0.0",
     "env-cmd": "^11.0.0",
     "esbuild": "^0.28.2",
@@ -100,7 +99,7 @@
     "grpc-tools": "^1.13.1",
     "jsdom": "^26.1.0",
     "lint-staged": "^16.4.0",
-    "node-forge": "^1.4.0",
+    "node-forge": "^1.4.2",
     "nodemon": "^3.1.14",
     "postcss": "^8.5.28",
     "prettier": "^3.9.9",
@@ -109,10 +108,10 @@
     "sass": "^1.105.1",
     "start-server-and-test": "^3.0.12",
     "tailwindcss": "^4.3.3",
-    "testcontainers": "^11.14.0",
+    "testcontainers": "^12.1.0",
     "ts-proto": "^2.12.4",
     "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

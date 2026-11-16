@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "@/lib/server/logger";
 
 const logger = createLogger("auth-backend-token");
 

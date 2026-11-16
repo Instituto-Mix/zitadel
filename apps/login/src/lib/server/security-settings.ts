@@ -1,6 +1,10 @@
-import { PromiseCache } from "@/lib/cache";
-import { applyCustomHeaders } from "@/lib/custom-headers";
-import { createLogger } from "@/lib/logger";
+import "server-only";
+
+import { loginClientKeyToken, systemAPIToken } from "@/lib/server/api";
+import { PromiseCache } from "@/lib/server/cache";
+import { applyCustomHeaders } from "@/lib/server/custom-headers";
+import { hasLoginClientKey, hasServiceUserToken, hasSystemUserCredentials } from "@/lib/server/deployment";
+import { createLogger } from "@/lib/server/logger";
 import type { GetSecuritySettingsResponseJson } from "@zitadel/proto/zitadel/settings/v2/settings_service_pb";
 
 const logger = createLogger("security-settings");
@@ -33,14 +37,10 @@ const cache = new PromiseCache(Number(cacheConfig.maxSize) || 10_000);
  * Priority: system user JWT > login client key > service account token.
  */
 async function resolveAuthToken(): Promise<string> {
-  const { hasSystemUserCredentials, hasLoginClientKey, hasServiceUserToken } = await import("@/lib/deployment");
-
   if (hasSystemUserCredentials()) {
-    const { systemAPIToken } = await import("@/lib/api");
     return systemAPIToken();
   }
   if (hasLoginClientKey()) {
-    const { loginClientKeyToken } = await import("@/lib/api");
     return loginClientKeyToken();
   }
   if (hasServiceUserToken()) {

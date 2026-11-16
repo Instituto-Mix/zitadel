@@ -9,7 +9,7 @@ resolver error it falls through unchanged (**fail-open**), so real `loginName`s 
 work even if the resolver is down.
 
 - Feature code: `src/lib/server/legacy-identifier.ts` (+ tests), wired into
-  `src/lib/server/loginname.ts` just before `searchUsers`.
+  `src/lib/actions/loginname.ts` just before `searchUsers`.
 - Deploy target: a **container** (Dokploy), not Cloudflare Workers. Next.js 16's
   `proxy.ts` (middleware) is Node-runtime-only, which is incompatible with the
   Workers/OpenNext adapter — so we ship a normal Node standalone server in a container.
@@ -266,6 +266,17 @@ Sharing this signing secret does not share tickets or remove the single-instance
 Device authorization (v4.20.0): the `deviceCodeCheck` cookie changed from an unsigned SHA-256 to a signed 5-minute proof, so device codes entered before the deployment are rejected and users must re-enter the code. Ordinary sessions are unaffected.
 
 ### Upgrade compatibility
+
+The upstream source integration is pinned to `v4.20.3`
+(`a8b256c94b6d8615f12c05c54289600a06ca1912`), not moving upstream `main`.
+Source ancestry alone does not establish the deployed Entrar image or backend
+version; record and verify those runtime revisions separately.
+
+Browser-callable Server Actions live in `src/lib/actions/`; trusted helpers live
+in `src/lib/server/` and import `server-only`. The fork's CPF/legacy resolver and
+ERP reset tickets remain server-only. The public first-access completion action
+belongs in `actions/password.ts` and the reviewed action allowlist. Keep the
+build-time action-manifest check enabled when integrating future upstream fixes.
 
 Tested backend range:
 

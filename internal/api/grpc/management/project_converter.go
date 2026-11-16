@@ -10,6 +10,7 @@ import (
 	"github.com/zitadel/zitadel/internal/api/grpc/object"
 	proj_grpc "github.com/zitadel/zitadel/internal/api/grpc/project"
 	"github.com/zitadel/zitadel/internal/command"
+	"github.com/zitadel/zitadel/internal/config/systemdefaults"
 	"github.com/zitadel/zitadel/internal/domain"
 	"github.com/zitadel/zitadel/internal/eventstore/v1/models"
 	"github.com/zitadel/zitadel/internal/query"
@@ -18,6 +19,7 @@ import (
 )
 
 func ProjectCreateToCommand(req *mgmt_pb.AddProjectRequest, projectID string, resourceOwner string) *command.AddProject {
+	admins := projectCreateAdminsToCommand(req.GetAdmins())
 	return &command.AddProject{
 		ObjectRoot: models.ObjectRoot{
 			AggregateID:   projectID,
@@ -28,6 +30,7 @@ func ProjectCreateToCommand(req *mgmt_pb.AddProjectRequest, projectID string, re
 		ProjectRoleCheck:       req.ProjectRoleCheck,
 		HasProjectCheck:        req.HasProjectCheck,
 		PrivateLabelingSetting: privateLabelingSettingToDomain(req.PrivateLabelingSetting),
+		Admins:                 admins,
 	}
 }
 
@@ -54,6 +57,20 @@ func privateLabelingSettingToDomain(setting proj_pb.PrivateLabelingSetting) doma
 	default:
 		return domain.PrivateLabelingSettingUnspecified
 	}
+}
+
+func projectCreateAdminsToCommand(requestAdmins []*mgmt_pb.AddProjectRequest_Admin) []*command.AddProjectAdmin {
+	if len(requestAdmins) == 0 {
+		return nil
+	}
+	admins := make([]*command.AddProjectAdmin, len(requestAdmins))
+	for i, admin := range requestAdmins {
+		admins[i] = &command.AddProjectAdmin{
+			ID:    admin.GetUserId(),
+			Roles: admin.GetRoles(),
+		}
+	}
+	return admins
 }
 
 func AddProjectRoleRequestToCommand(req *mgmt_pb.AddProjectRoleRequest, resourceOwner string) *command.AddProjectRole {
@@ -122,8 +139,11 @@ func UpdateProjectMemberRequestToCommand(req *mgmt_pb.UpdateProjectMemberRequest
 	}
 }
 
-func listProjectRequestToModel(req *mgmt_pb.ListProjectsRequest) (*query.ProjectSearchQueries, error) {
-	offset, limit, asc := object.ListQueryToModel(req.Query)
+func listProjectRequestToModel(defaults systemdefaults.SystemDefaults, req *mgmt_pb.ListProjectsRequest) (*query.ProjectSearchQueries, error) {
+	offset, limit, asc, err := object.ListQueryToModel(defaults, req.Query)
+	if err != nil {
+		return nil, err
+	}
 	queries, err := proj_grpc.ProjectQueriesToModel(req.Queries)
 	if err != nil {
 		return nil, err
@@ -138,8 +158,11 @@ func listProjectRequestToModel(req *mgmt_pb.ListProjectsRequest) (*query.Project
 	}, nil
 }
 
-func listGrantedProjectsRequestToModel(req *mgmt_pb.ListGrantedProjectsRequest) (*query.ProjectGrantSearchQueries, error) {
-	offset, limit, asc := object.ListQueryToModel(req.Query)
+func listGrantedProjectsRequestToModel(defaults systemdefaults.SystemDefaults, req *mgmt_pb.ListGrantedProjectsRequest) (*query.ProjectGrantSearchQueries, error) {
+	offset, limit, asc, err := object.ListQueryToModel(defaults, req.Query)
+	if err != nil {
+		return nil, err
+	}
 	queries, err := proj_grpc.ProjectQueriesToModel(req.Queries)
 	if err != nil {
 		return nil, err
@@ -154,8 +177,11 @@ func listGrantedProjectsRequestToModel(req *mgmt_pb.ListGrantedProjectsRequest) 
 	}, nil
 }
 
-func listProjectRolesRequestToModel(req *mgmt_pb.ListProjectRolesRequest) (*query.ProjectRoleSearchQueries, error) {
-	offset, limit, asc := object.ListQueryToModel(req.Query)
+func listProjectRolesRequestToModel(defaults systemdefaults.SystemDefaults, req *mgmt_pb.ListProjectRolesRequest) (*query.ProjectRoleSearchQueries, error) {
+	offset, limit, asc, err := object.ListQueryToModel(defaults, req.Query)
+	if err != nil {
+		return nil, err
+	}
 	queries, err := proj_grpc.RoleQueriesToModel(req.Queries)
 	if err != nil {
 		return nil, err
@@ -170,8 +196,11 @@ func listProjectRolesRequestToModel(req *mgmt_pb.ListProjectRolesRequest) (*quer
 	}, nil
 }
 
-func listGrantedProjectRolesRequestToModel(req *mgmt_pb.ListGrantedProjectRolesRequest) (*query.ProjectRoleSearchQueries, error) {
-	offset, limit, asc := object.ListQueryToModel(req.Query)
+func listGrantedProjectRolesRequestToModel(defaults systemdefaults.SystemDefaults, req *mgmt_pb.ListGrantedProjectRolesRequest) (*query.ProjectRoleSearchQueries, error) {
+	offset, limit, asc, err := object.ListQueryToModel(defaults, req.Query)
+	if err != nil {
+		return nil, err
+	}
 	queries, err := proj_grpc.RoleQueriesToModel(req.Queries)
 	if err != nil {
 		return nil, err
@@ -186,8 +215,11 @@ func listGrantedProjectRolesRequestToModel(req *mgmt_pb.ListGrantedProjectRolesR
 	}, nil
 }
 
-func ListProjectMembersRequestToModel(ctx context.Context, req *mgmt_pb.ListProjectMembersRequest) (*query.ProjectMembersQuery, error) {
-	offset, limit, asc := object.ListQueryToModel(req.Query)
+func ListProjectMembersRequestToModel(ctx context.Context, defaults systemdefaults.SystemDefaults, req *mgmt_pb.ListProjectMembersRequest) (*query.ProjectMembersQuery, error) {
+	offset, limit, asc, err := object.ListQueryToModel(defaults, req.Query)
+	if err != nil {
+		return nil, err
+	}
 	queries, err := member_grpc.MemberQueriesToQuery(req.Queries)
 	if err != nil {
 		return nil, err

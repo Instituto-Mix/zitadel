@@ -1,8 +1,6 @@
 package zerrors
 
-import (
-	"fmt"
-)
+import "fmt"
 
 func ThrowPermissionDenied(parent error, id, message string) error {
 	return CreateZitadelError(KindPermissionDenied, parent, id, message, 1)

@@ -1,7 +1,9 @@
-import { createLogger } from "@/lib/logger";
-import { hasVerifiedPrimaryFactor } from "@/lib/session";
-import { checkUserVerification } from "@/lib/verify-helper";
-import { listAuthenticationMethodTypes, ServiceConfig } from "@/lib/zitadel";
+import "server-only";
+
+import { createLogger } from "@/lib/server/logger";
+import { hasVerifiedPrimaryFactor } from "@/lib/server/session";
+import { checkUserVerification } from "@/lib/server/verify-helper";
+import { listAuthenticationMethodTypes, ServiceConfig } from "@/lib/server/zitadel";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
 
 const logger = createLogger("enrollment-guard");
@@ -15,7 +17,7 @@ const logger = createLogger("enrollment-guard");
  *  - the user has no authentication methods yet AND a prior user-verification check passed
  *    (the legitimate email/init-code onboarding path, mirroring `registerPasskeyLink`).
  *
- * This mirrors the gate that `apps/login/src/lib/server/passkeys.ts` already applies to
+ * This mirrors the gate that `apps/login/src/lib/actions/passkeys.ts` already applies to
  * passkey registration, so that U2F, TOTP and OTP enrollment share the exact same rules.
  */
 export async function getEnrollmentAuthorizationError({

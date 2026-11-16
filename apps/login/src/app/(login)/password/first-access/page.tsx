@@ -4,8 +4,8 @@ import { FirstAccessPasswordForm } from "@/components/first-access-password-form
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { FIRST_ACCESS_COOKIE_NAME, peekFirstAccessTicket } from "@/lib/server/first-access-ticket";
-import { getServiceConfig } from "@/lib/service-url";
-import { getBrandingSettings, getDefaultOrg, getPasswordComplexitySettings } from "@/lib/zitadel";
+import { getServiceConfig } from "@/lib/server/service-url";
+import { getBrandingSettings, getDefaultOrg, getPasswordComplexitySettings } from "@/lib/server/zitadel";
 import { Organization } from "@zitadel/proto/zitadel/org/v2/org_pb";
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";

@@ -126,6 +126,14 @@
         "unknownError": "Неизвестная ошибка"
       }
     },
+    "firstAccess": {
+      "title": "Choose your password",
+      "description": "Your legacy credentials were confirmed. Choose a new password to finish setting up your account.",
+      "errors": {
+        "expired": "This first access session has expired. Please sign in again to restart.",
+        "integrity": "Your account is not ready for first access yet. Please contact support — no password change was made."
+      }
+    },
     "complexity": {
       "length": "Минимум {minLength} символов.",
       "hasSymbol": "Должен содержать специальный символ.",
@@ -155,15 +163,8 @@
       "sessionNotValid": "Сессия недействительна",
       "passwordVerificationMissing": "Отсутствует проверка пароля.",
       "passwordVerificationTooOld": "Проверка пароля устарела. Пожалуйста, подтвердите пароль еще раз.",
-      "passwordResetNotAllowed": "Сброс пароля запрещен. Обратитесь к администратору за дополнительной информацией."
-    },
-    "firstAccess": {
-      "title": "Choose your password",
-      "description": "Your legacy credentials were confirmed. Choose a new password to finish setting up your account.",
-      "errors": {
-        "expired": "This first access session has expired. Please sign in again to restart.",
-        "integrity": "Your account is not ready for first access yet. Please contact support — no password change was made."
-      }
+      "passwordResetNotAllowed": "Сброс пароля запрещен. Обратитесь к администратору за дополнительной информацией.",
+      "localAuthenticationNotAllowed": "Локальная аутентификация запрещена! Обратитесь к администратору за дополнительной информацией."
     }
   },
   "idp": {
@@ -265,6 +266,11 @@
       "smsDescription": "Введите номер телефона для получения кода по SMS.",
       "emailDescription": "Введите email для получения кода.",
       "totpRegisterDescription": "Отсканируйте QR-код или перейдите по ссылке вручную.",
+      "emailAddDescription": "Используйте одноразовый код, отправляемый на ваш подтверждённый адрес электронной почты, в качестве второго фактора.",
+      "smsAddDescription": "Используйте одноразовый код, отправляемый на ваш подтверждённый номер телефона, в качестве второго фактора.",
+      "add": "Добавить",
+      "emailAdded": "Код по электронной почте добавлен.",
+      "smsAdded": "Код по SMS добавлен.",
       "submit": "Продолжить",
       "labels": {
         "code": "Код"
@@ -275,7 +281,13 @@
     },
     "errors": {
       "couldNotRequestChallenge": "Не удалось запросить OTP-челлендж",
-      "couldNotVerifyCode": "Не удалось проверить OTP-код"
+      "couldNotVerifyCode": "Не удалось проверить OTP-код",
+      "couldNotGetSession": "Не удалось загрузить сессию. Войдите снова.",
+      "invalidMethod": "Этот второй фактор не поддерживается.",
+      "couldNotAddEmail": "Не удалось добавить код по электронной почте.",
+      "couldNotAddSms": "Не удалось добавить код по SMS.",
+      "emailNotVerified": "Подтвердите адрес электронной почты, прежде чем добавлять коды по электронной почте.",
+      "phoneNotVerified": "Подтвердите номер телефона, прежде чем добавлять коды по SMS."
     }
   },
   "passkey": {
@@ -369,7 +381,8 @@
       "couldNotCreateSession": "Не удалось создать сессию",
       "userNotFound": "Пользователь не найден в системе",
       "couldNotLinkIDP": "Не удалось привязать IDP к пользователю",
-      "couldNotRegisterUser": "Не удалось зарегистрировать пользователя"
+      "couldNotRegisterUser": "Не удалось зарегистрировать пользователя",
+      "sessionMismatch": "Регистрация была начата в другом браузере. Войдите снова через вашего поставщика удостоверений."
     }
   },
   "invite": {

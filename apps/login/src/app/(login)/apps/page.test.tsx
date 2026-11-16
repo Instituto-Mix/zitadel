@@ -18,15 +18,15 @@ vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
 }));
-vi.mock("@/lib/session", () => ({ loadMostRecentSession: mocks.loadMostRecentSession }));
-vi.mock("@/lib/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
-vi.mock("@/lib/zitadel", () => ({
+vi.mock("@/lib/server/session", () => ({ loadMostRecentSession: mocks.loadMostRecentSession }));
+vi.mock("@/lib/server/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
+vi.mock("@/lib/server/zitadel", () => ({
   getBrandingSettings: mocks.getBrandingSettings,
   listApplications: mocks.listApplications,
   listAuthorizations: mocks.listAuthorizations,
 }));
-vi.mock("@/lib/email-status", () => ({ isEmailPending: mocks.isEmailPending }));
-vi.mock("@/lib/site-meta", () => ({ fetchSiteMeta: mocks.fetchSiteMeta }));
+vi.mock("@/lib/server/email-status", () => ({ isEmailPending: mocks.isEmailPending }));
+vi.mock("@/lib/server/site-meta", () => ({ fetchSiteMeta: mocks.fetchSiteMeta }));
 vi.mock("@/components/dynamic-theme", () => ({
   DynamicTheme: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));

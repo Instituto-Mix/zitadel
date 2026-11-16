@@ -1,4 +1,4 @@
-import type * as SessionModule from "@/lib/session";
+import type * as SessionModule from "@/lib/server/session";
 import { AuthenticationMethodType } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import Page from "./page";
@@ -20,14 +20,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-vi.mock("@/lib/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
-vi.mock("@/lib/cookies", () => ({ getSessionCookieById: mocks.getSessionCookieById }));
-vi.mock("@/lib/session", async (importOriginal) => ({
+vi.mock("@/lib/server/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
+vi.mock("@/lib/server/cookies", () => ({ getSessionCookieById: mocks.getSessionCookieById }));
+vi.mock("@/lib/server/session", async (importOriginal) => ({
   ...(await importOriginal<typeof SessionModule>()),
   loadMostRecentSession: mocks.loadMostRecentSession,
 }));
-vi.mock("@/lib/verify-helper", () => ({ checkUserVerification: mocks.checkUserVerification }));
-vi.mock("@/lib/zitadel", () => ({
+vi.mock("@/lib/server/verify-helper", () => ({ checkUserVerification: mocks.checkUserVerification }));
+vi.mock("@/lib/server/zitadel", () => ({
   getActiveIdentityProviders: mocks.getActiveIdentityProviders,
   getBrandingSettings: mocks.getBrandingSettings,
   getLoginSettings: mocks.getLoginSettings,

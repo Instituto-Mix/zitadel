@@ -1,4 +1,4 @@
-import { resetPassword, sendPassword } from "@/lib/server/password";
+import { resetPassword, sendPassword } from "@/lib/actions/password";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { PasswordForm } from "./password-form";
@@ -14,7 +14,7 @@ vi.mock("next-intl", () => ({
     ({ "verify.showPassword": "Show password", "verify.hidePassword": "Hide password" })[key] ?? key,
 }));
 
-vi.mock("@/lib/server/password", () => ({
+vi.mock("@/lib/actions/password", () => ({
   sendPassword: vi.fn().mockResolvedValue({ redirect: "/next" }),
   resetPassword: vi.fn(),
 }));

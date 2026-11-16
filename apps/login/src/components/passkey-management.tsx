@@ -1,6 +1,6 @@
 "use client";
 
-import { removeManagedPasskey } from "@/lib/server/passkey-management";
+import { removeManagedPasskey } from "@/lib/actions/passkey-management";
 import { Passkey } from "@zitadel/proto/zitadel/user/v2/user_pb";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";

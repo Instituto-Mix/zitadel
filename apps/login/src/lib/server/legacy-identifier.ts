@@ -1,6 +1,8 @@
+import "server-only";
+
 import { getAuthBackendAccessToken } from "./auth-backend-token";
 
-import { createLogger } from "@/lib/logger";
+import { createLogger } from "@/lib/server/logger";
 
 const logger = createLogger("legacy-identifier");
 

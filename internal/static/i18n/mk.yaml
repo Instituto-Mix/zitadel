@@ -175,6 +175,7 @@ Errors:
         NotExisting: "Мултифактор OTP (Еднократна Лозинка) не постои"
         NotReady: "Мултифактор OTP (Еднократна Лозинка) не е подготвен"
         InvalidCode: "Невалиден код"
+        Reused: "Овој код е веќе искористен. Ве молиме почекајте нов код"
       U2F:
         NotExisting: "U2F не постои"
       Passwordless:
@@ -203,6 +204,7 @@ Errors:
     AlreadyActive: "Организацијата е веќе активна"
     Empty: "Организацијата е празна"
     NotFound: "Организацијата не е пронајдена"
+    NotActive: "Организацијата не е активна"
     NotChanged: "Организацијата не е променета"
     DefaultOrgNotDeletable: "Стандардната организација не смее да биде избришана"
     ZitadelOrgNotDeletable: "Организацијата со Zitadel проект не смее да биде избришана"
@@ -325,6 +327,7 @@ Errors:
       APIAuthMethodNoSecret: "Избраниот API метод за автентикација не бара таен клуч"
       AuthMethodNoPrivateKeyJWT: "Избраниот метод за автентикација не бара приватен клуч"
       ClientSecretInvalid: "Клиентскиот таен клуч е невалиден"
+      ClientSecretNotSet: "Тајната на клиентот не е поставена"
       Key:
         AlreadyExisting: "Клучот за апликацијата веќе постои"
         NotFound: "Клучот за апликацијата не е пронајден"
@@ -539,6 +542,7 @@ Errors:
     NotExisting: "Барањето за автентикација не постои"
     WrongLoginClient: "Барањето за автификација беше креирано од друг клиент за најавување"
     AlreadyHandled: "Барањето за автентикација е веќе обработено"
+    NotAuthenticated: "Корисникот не е автентициран"
   OIDCSession:
     RefreshTokenInvalid: "Токенот за освежување е неважечки"
     Token:
@@ -761,6 +765,7 @@ EventTypes:
           check:
             succeeded: "Проверката на мултифактор OTP е успешна"
             failed: "Проверката на мултифактор OTP е неуспешна"
+            reused: "Кодот за мултифактор OTP е повторно употребен"
           sms:
             added: "Додадена е мултифакторна OTP SMS"
             removed: "Отстранета мултифакторна OTP SMS"

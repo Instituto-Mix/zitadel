@@ -1,325 +1,156 @@
-import { signSession } from "@/lib/session-cookie-signature";
-import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { OTPAddForm } from "@/components/otp-add-form";
+import { Translated } from "@/components/translated";
+import { isValidElement, ReactElement, ReactNode } from "react";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import Page from "./page";
 
-const mocks = vi.hoisted(() => ({
-  headers: vi.fn(),
-  cookies: vi.fn(),
-  getServiceConfig: vi.fn(),
+vi.mock("@/lib/server/zitadel", () => ({
   getBrandingSettings: vi.fn(),
   getLoginSettings: vi.fn(),
-  getSession: vi.fn(),
-  getUserByID: vi.fn(),
-  listAuthenticationMethodTypes: vi.fn(),
   registerTOTP: vi.fn(),
-  addOTPSMS: vi.fn(),
   addOTPEmail: vi.fn(),
+  addOTPSMS: vi.fn(),
 }));
 
-vi.mock("next/headers", () => ({ headers: mocks.headers, cookies: mocks.cookies }));
-vi.mock("@/lib/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
-vi.mock("@/lib/zitadel", () => ({
-  getBrandingSettings: mocks.getBrandingSettings,
-  getLoginSettings: mocks.getLoginSettings,
-  getSession: mocks.getSession,
-  getUserByID: mocks.getUserByID,
-  listAuthenticationMethodTypes: mocks.listAuthenticationMethodTypes,
-  registerTOTP: mocks.registerTOTP,
-  addOTPSMS: mocks.addOTPSMS,
-  addOTPEmail: mocks.addOTPEmail,
+vi.mock("@/lib/server/enrollment-guard", () => ({
+  getEnrollmentAuthorizationError: vi.fn(),
 }));
 
-const SERVICE_CONFIG = { baseUrl: "https://zitadel.example" };
-const SELECTED_SESSION_ID = "selected-session";
-const SELECTED_SESSION_TOKEN = "selected-token";
-const SELECTED_USER_ID = "selected-user";
-const SELECTED_LOGIN_NAME = "selected@example.com";
-const SELECTED_ORGANIZATION = "selected-org";
-const OTHER_SESSION_ID = "other-session";
-const OTHER_SESSION_TOKEN = "other-token";
-const OTHER_USER_ID = "other-user";
-const OTHER_LOGIN_NAME = "other@example.com";
+vi.mock("@/lib/actions/otp", () => ({
+  addOTP: vi.fn(),
+}));
 
-function timestamp(offsetSeconds = 0) {
-  return { seconds: BigInt(Math.floor(Date.now() / 1000) + offsetSeconds), nanos: 0 };
-}
+vi.mock("@/lib/server/session", () => ({
+  loadMostRecentSession: vi.fn(),
+  loadSessionById: vi.fn(),
+}));
 
-type TestSessionCookie = {
-  id: string;
-  token: string;
-  loginName: string;
-  organization: string;
-  creationTs: string;
-  expirationTs: string;
-  changeTs: string;
+vi.mock("@/lib/server/service-url", () => ({
+  getServiceConfig: vi.fn(() => ({ serviceConfig: { baseUrl: "https://example.com" } })),
+}));
+
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => key,
+}));
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn(() => new Headers()),
+}));
+
+const session = {
+  id: "session-1",
+  factors: { user: { id: "user-1", loginName: "user@example.com", displayName: "User", organizationId: "org-1" } },
 };
 
-type SessionCookieInput = Pick<TestSessionCookie, "id" | "token" | "loginName" | "organization" | "changeTs">;
-
-type SessionEntry = { cookie: TestSessionCookie; session: unknown };
-
-function sessionCookie({ id, token, loginName, organization, changeTs }: SessionCookieInput): TestSessionCookie {
-  return {
-    id,
-    token,
-    loginName,
-    organization,
-    creationTs: "1",
-    expirationTs: "4102444800000",
-    changeTs,
-  };
+// collects all elements of the given type from the (unrendered) element tree returned by the page
+function findElements(node: ReactNode, type: unknown): ReactElement<any>[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((child) => findElements(child, type));
+  }
+  if (!isValidElement(node)) {
+    return [];
+  }
+  const element = node as ReactElement<any>;
+  return [...(element.type === type ? [element] : []), ...findElements(element.props?.children, type)];
 }
 
-function authenticatedSession({
-  id,
-  userId,
-  loginName,
-  organization,
-  expiresInSeconds = 3600,
-  authentication = { password: { verifiedAt: timestamp() } },
-}: {
-  id: string;
-  userId: string;
-  loginName: string;
-  organization: string;
-  expiresInSeconds?: number;
-  authentication?: Record<string, unknown>;
-}) {
-  return {
-    id,
-    expirationDate: timestamp(expiresInSeconds),
-    factors: {
-      user: { id: userId, loginName, organizationId: organization, displayName: loginName },
-      ...authentication,
-    },
-  };
-}
+describe("otp set page", () => {
+  let zitadel: any;
+  let sessionLib: any;
+  let guard: any;
+  let addOTP: any;
 
-function useSessions(...entries: SessionEntry[]) {
-  const sessionByToken = Object.fromEntries(entries.map(({ cookie, session }) => [cookie.token, session]));
-  const serializedCookies = JSON.stringify(entries.map(({ cookie }) => signSession(cookie)));
-
-  mocks.cookies.mockResolvedValue({
-    get: (name: string) => (name === "sessions" ? { value: serializedCookies } : undefined),
-  });
-  mocks.getSession.mockImplementation(async ({ sessionToken }: { sessionToken: string }) => ({
-    session: sessionByToken[sessionToken],
-  }));
-}
-
-function selectedSession() {
-  return authenticatedSession({
-    id: SELECTED_SESSION_ID,
-    userId: SELECTED_USER_ID,
-    loginName: SELECTED_LOGIN_NAME,
-    organization: SELECTED_ORGANIZATION,
-  });
-}
-
-function selectedCookie() {
-  return sessionCookie({
-    id: SELECTED_SESSION_ID,
-    token: SELECTED_SESSION_TOKEN,
-    loginName: SELECTED_LOGIN_NAME,
-    organization: SELECTED_ORGANIZATION,
-    changeTs: "1",
-  });
-}
-
-async function renderSetPage(searchParams: Record<string, string | undefined> = {}) {
-  return Page({
-    params: Promise.resolve({ method: "time-based" }),
-    searchParams: Promise.resolve(searchParams),
-  });
-}
-
-const selectedAccountParams = {
-  sessionId: SELECTED_SESSION_ID,
-  loginName: SELECTED_LOGIN_NAME,
-  organization: SELECTED_ORGANIZATION,
-};
-const legacyAccountParams = {
-  loginName: SELECTED_LOGIN_NAME,
-  organization: SELECTED_ORGANIZATION,
-};
-
-describe("TOTP registration route authorization", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    vi.stubEnv("ZITADEL_SESSION_COOKIE_SECRET", "test-session-cookie-secret-at-least-32-chars");
+    zitadel = await import("@/lib/server/zitadel");
+    sessionLib = await import("@/lib/server/session");
+    guard = await import("@/lib/server/enrollment-guard");
+    addOTP = vi.mocked((await import("@/lib/actions/otp")).addOTP);
 
-    mocks.headers.mockResolvedValue(new Headers());
-    mocks.getServiceConfig.mockReturnValue({ serviceConfig: SERVICE_CONFIG });
-    mocks.getBrandingSettings.mockResolvedValue(undefined);
-    mocks.getLoginSettings.mockResolvedValue({ secondFactors: [SecondFactorType.OTP] });
-    mocks.getUserByID.mockResolvedValue({
-      user: { type: { case: "human", value: { email: { isVerified: true } } } },
-    });
-    mocks.listAuthenticationMethodTypes.mockResolvedValue({ authMethodTypes: [] });
-    mocks.registerTOTP.mockResolvedValue({ uri: "otpauth://totp/account", secret: "totp-secret" });
-
-    useSessions({ cookie: selectedCookie(), session: selectedSession() });
+    vi.mocked(zitadel.getBrandingSettings).mockResolvedValue({} as any);
+    vi.mocked(zitadel.getLoginSettings).mockResolvedValue({} as any);
+    vi.mocked(sessionLib.loadMostRecentSession).mockResolvedValue(session as any);
+    vi.mocked(sessionLib.loadSessionById).mockResolvedValue(session as any);
+    vi.mocked(guard.getEnrollmentAuthorizationError).mockResolvedValue(null);
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  test("registers TOTP for the account in the selected session", async () => {
-    const otherCookie = sessionCookie({
-      id: OTHER_SESSION_ID,
-      token: OTHER_SESSION_TOKEN,
-      loginName: OTHER_LOGIN_NAME,
-      organization: "other-org",
-      changeTs: "2",
-    });
-    const otherSession = authenticatedSession({
-      id: OTHER_SESSION_ID,
-      userId: OTHER_USER_ID,
-      loginName: OTHER_LOGIN_NAME,
-      organization: "other-org",
-    });
-    useSessions({ cookie: selectedCookie(), session: selectedSession() }, { cookie: otherCookie, session: otherSession });
-
-    await renderSetPage(selectedAccountParams);
-
-    expect(mocks.registerTOTP).toHaveBeenCalledTimes(1);
-    expect(mocks.registerTOTP).toHaveBeenCalledWith({ serviceConfig: SERVICE_CONFIG, userId: SELECTED_USER_ID });
-  });
-
-  test("rejects a loginName that does not match the selected session before registering TOTP", async () => {
-    const otherCookie = sessionCookie({
-      id: OTHER_SESSION_ID,
-      token: OTHER_SESSION_TOKEN,
-      loginName: OTHER_LOGIN_NAME,
-      organization: "other-org",
-      changeTs: "2",
-    });
-    const otherSession = authenticatedSession({
-      id: OTHER_SESSION_ID,
-      userId: OTHER_USER_ID,
-      loginName: OTHER_LOGIN_NAME,
-      organization: "other-org",
-    });
-    useSessions({ cookie: selectedCookie(), session: selectedSession() }, { cookie: otherCookie, session: otherSession });
-
-    await expect(renderSetPage({ sessionId: SELECTED_SESSION_ID, loginName: OTHER_LOGIN_NAME })).rejects.toThrow();
-
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
-  });
-
-  test("rejects an organization that does not match the selected session before registering TOTP", async () => {
-    const sameLoginNameInOtherOrganization = sessionCookie({
-      id: OTHER_SESSION_ID,
-      token: OTHER_SESSION_TOKEN,
-      loginName: SELECTED_LOGIN_NAME,
-      organization: "other-org",
-      changeTs: "2",
-    });
-    const otherOrganizationSession = authenticatedSession({
-      id: OTHER_SESSION_ID,
-      userId: OTHER_USER_ID,
-      loginName: SELECTED_LOGIN_NAME,
-      organization: "other-org",
-    });
-    useSessions(
-      { cookie: selectedCookie(), session: selectedSession() },
-      { cookie: sameLoginNameInOtherOrganization, session: otherOrganizationSession },
-    );
-
-    await expect(
-      renderSetPage({
-        sessionId: SELECTED_SESSION_ID,
-        loginName: SELECTED_LOGIN_NAME,
-        organization: "other-org",
-      }),
-    ).rejects.toThrow();
-
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
-  });
-
-  test("rejects an expired selected session before registering TOTP", async () => {
-    useSessions({
-      cookie: selectedCookie(),
-      session: authenticatedSession({
-        id: SELECTED_SESSION_ID,
-        userId: SELECTED_USER_ID,
-        loginName: SELECTED_LOGIN_NAME,
-        organization: SELECTED_ORGANIZATION,
-        expiresInSeconds: -3600,
-      }),
+  // Rendering the page (e.g. by following a link) must never add a second factor to the
+  // signed-in user; OTP via email or SMS is only added on explicit confirmation.
+  test.each(["email", "sms"])("does not add OTP via %s while rendering but asks for confirmation", async (method) => {
+    const result = await Page({
+      params: Promise.resolve({ method }),
+      searchParams: Promise.resolve({}),
     });
 
-    await expect(renderSetPage(selectedAccountParams)).rejects.toThrow();
+    expect(zitadel.addOTPEmail).not.toHaveBeenCalled();
+    expect(zitadel.addOTPSMS).not.toHaveBeenCalled();
+    expect(addOTP).not.toHaveBeenCalled();
 
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
+    const forms = findElements(result, OTPAddForm);
+    expect(forms).toHaveLength(1);
+    expect(forms[0].props).toMatchObject({ method, sessionId: "session-1", urlToContinue: "/accounts", checkAfter: false });
   });
 
-  test("rejects an unverified selected session before registering TOTP", async () => {
-    useSessions({
-      cookie: selectedCookie(),
-      session: authenticatedSession({
-        id: SELECTED_SESSION_ID,
-        userId: SELECTED_USER_ID,
-        loginName: SELECTED_LOGIN_NAME,
-        organization: SELECTED_ORGANIZATION,
-        authentication: { webAuthN: { verifiedAt: timestamp(), userVerified: false } },
-      }),
+  test.each(["email", "sms"])("does not redirect for %s with checkAfter while rendering", async (method) => {
+    const result = await Page({
+      params: Promise.resolve({ method }),
+      searchParams: Promise.resolve({ checkAfter: "true", loginName: "user@example.com" }),
     });
 
-    await expect(renderSetPage(selectedAccountParams)).rejects.toThrow();
-
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
+    expect(addOTP).not.toHaveBeenCalled();
+    const forms = findElements(result, OTPAddForm);
+    expect(forms).toHaveLength(1);
+    expect(forms[0].props.checkAfter).toBe(true);
+    expect(forms[0].props.urlToContinue).toBe(`/otp/${method}?loginName=user%40example.com`);
   });
 
-  test.each(["expired", "unverified"] as const)(
-    "rejects an %s legacy session before registering TOTP",
-    async (invalidState) => {
-      const invalidSession =
-        invalidState === "expired"
-          ? { expiresInSeconds: -3600 }
-          : { authentication: { webAuthN: { verifiedAt: timestamp(), userVerified: false } } };
-      useSessions({
-        cookie: selectedCookie(),
-        session: authenticatedSession({
-          id: SELECTED_SESSION_ID,
-          userId: SELECTED_USER_ID,
-          loginName: SELECTED_LOGIN_NAME,
-          organization: SELECTED_ORGANIZATION,
-          ...invalidSession,
-        }),
-      });
+  test("hides the confirmation and shows the error when enrollment is not authorized", async () => {
+    vi.mocked(guard.getEnrollmentAuthorizationError).mockResolvedValue("You have to authenticate");
 
-      await expect(renderSetPage(legacyAccountParams)).rejects.toThrow();
+    const result = await Page({
+      params: Promise.resolve({ method: "email" }),
+      searchParams: Promise.resolve({}),
+    });
 
-      expect(mocks.registerTOTP).not.toHaveBeenCalled();
-    },
-  );
-
-  test("registers TOTP for a valid loginName-selected legacy session", async () => {
-    useSessions({ cookie: selectedCookie(), session: selectedSession() });
-
-    await renderSetPage(legacyAccountParams);
-
-    expect(mocks.registerTOTP).toHaveBeenCalledTimes(1);
-    expect(mocks.registerTOTP).toHaveBeenCalledWith({ serviceConfig: SERVICE_CONFIG, userId: SELECTED_USER_ID });
+    expect(findElements(result, OTPAddForm)).toHaveLength(0);
+    expect(JSON.stringify(result)).toContain("You have to authenticate");
   });
 
-  test("rejects a legacy session when the account policy disables TOTP", async () => {
-    mocks.getLoginSettings.mockResolvedValue({ secondFactors: [] });
-    useSessions({ cookie: selectedCookie(), session: selectedSession() });
+  test("renders an alert instead of the confirmation without a session", async () => {
+    vi.mocked(sessionLib.loadMostRecentSession).mockResolvedValue(undefined);
 
-    await expect(renderSetPage(legacyAccountParams)).rejects.toThrow();
+    const result = await Page({
+      params: Promise.resolve({ method: "email" }),
+      searchParams: Promise.resolve({}),
+    });
 
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
+    expect(findElements(result, OTPAddForm)).toHaveLength(0);
+    expect(findElements(result, Translated).map((t) => t.props.i18nKey)).toContain("unknownContext");
   });
 
-  test("rejects registration when the account policy disables TOTP", async () => {
-    mocks.getLoginSettings.mockResolvedValue({ secondFactors: [] });
+  test("acts on the session given by sessionId instead of the most recent one", async () => {
+    vi.mocked(sessionLib.loadSessionById).mockResolvedValue({ ...session, id: "session-a" } as any);
 
-    await expect(renderSetPage(selectedAccountParams)).rejects.toThrow();
+    const result = await Page({
+      params: Promise.resolve({ method: "email" }),
+      searchParams: Promise.resolve({ sessionId: "session-a", organization: "org-1" }),
+    });
 
-    expect(mocks.registerTOTP).not.toHaveBeenCalled();
+    expect(sessionLib.loadSessionById).toHaveBeenCalledWith({ baseUrl: "https://example.com" }, "session-a", "org-1");
+    expect(sessionLib.loadMostRecentSession).not.toHaveBeenCalled();
+    expect(findElements(result, OTPAddForm)[0].props.sessionId).toBe("session-a");
+  });
+
+  test("renders the session expired alert when the session given by sessionId can't be loaded", async () => {
+    vi.mocked(sessionLib.loadSessionById).mockResolvedValue(undefined);
+
+    const result = await Page({
+      params: Promise.resolve({ method: "email" }),
+      searchParams: Promise.resolve({ sessionId: "session-a" }),
+    });
+
+    expect(sessionLib.loadMostRecentSession).not.toHaveBeenCalled();
+    expect(findElements(result, OTPAddForm)).toHaveLength(0);
+    expect(findElements(result, Translated).map((t) => t.props.i18nKey)).toContain("sessionExpired");
   });
 });

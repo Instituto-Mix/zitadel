@@ -95,6 +95,18 @@ func Test_verifyDB(t *testing.T) {
 			},
 			targetErr: nil,
 		},
+		{
+			name: "same database, skip creation",
+			args: args{
+				db: prepareDB(t,
+					expectQuery("SELECT current_database()", nil, []string{"current_database"}, [][]driver.Value{
+						{"zitadel"},
+					}),
+				),
+				database: "zitadel",
+			},
+			targetErr: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

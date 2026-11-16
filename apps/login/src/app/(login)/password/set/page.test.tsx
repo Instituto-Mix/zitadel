@@ -19,9 +19,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
-vi.mock("@/lib/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
-vi.mock("@/lib/session", () => ({ loadMostRecentSession: mocks.loadMostRecentSession }));
-vi.mock("@/lib/zitadel", () => ({
+vi.mock("@/lib/server/service-url", () => ({ getServiceConfig: mocks.getServiceConfig }));
+vi.mock("@/lib/server/session", () => ({ loadMostRecentSession: mocks.loadMostRecentSession }));
+vi.mock("@/lib/server/zitadel", () => ({
   getBrandingSettings: mocks.getBrandingSettings,
   getDefaultOrg: mocks.getDefaultOrg,
   getLoginSettings: mocks.getLoginSettings,

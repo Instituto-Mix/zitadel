@@ -651,6 +651,20 @@ func TestServer_ListOrganizations(t *testing.T) {
 		},
 	}
 
+	t.Run("list organizations, without required permissions", func(t *testing.T) {
+		noPermissionCtx := inst.WithAuthorizationToken(ctx, integration.UserTypeNoPermission)
+		retryDuration, tick := integration.WaitForAndTickWithMaxDuration(ctx, 20*time.Second)
+		require.EventuallyWithT(t, func(tt *assert.CollectT) {
+			got, err := client.ListOrganizations(noPermissionCtx, &v2beta_org.ListOrganizationsRequest{
+				Pagination:    &filter.PaginationRequest{Asc: true},
+				SortingColumn: v2beta_org.OrgFieldName_ORG_FIELD_NAME_CREATION_DATE,
+			})
+			require.NoError(tt, err)
+			require.Equal(tt, uint64(4), got.GetPagination().GetTotalResult())
+			require.Empty(tt, got.GetOrganizations())
+		}, retryDuration, tick, "timeout waiting for organizations without read permission")
+	})
+
 	for _, happyTestCase := range happyTestCases {
 		t.Run(happyTestCase.name, func(ttt *testing.T) {
 			retryDuration, tick := integration.WaitForAndTickWithMaxDuration(CTX, 20*time.Second)
@@ -1922,6 +1936,39 @@ func TestServer_ListOrganizationMetadata(t *testing.T) {
 func TestServer_DeleteOrganizationMetadata(t *testing.T) {
 	organisation, _, _ := createOrg(CTX, t, Client)
 	orgId := organisation.Id
+
+	_, err := Client.SetOrganizationMetadata(CTX, &v2beta_org.SetOrganizationMetadataRequest{
+		OrganizationId: orgId,
+		Metadata: []*v2beta_org.Metadata{
+			{
+				Key:   "key1",
+				Value: []byte("value1"),
+			},
+			{
+				Key:   "key2",
+				Value: []byte("value2"),
+			},
+			{
+				Key:   "key3",
+				Value: []byte("value3"),
+			}, {
+
+				Key:   "key4",
+				Value: []byte("value4"),
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// check metadata exists
+	retryDuration, tick := integration.WaitForAndTickWithMaxDuration(CTX, 1*time.Minute)
+	require.EventuallyWithT(t, func(ttt *assert.CollectT) {
+		listOrgMetadataRes, err := Client.ListOrganizationMetadata(CTX, &v2beta_org.ListOrganizationMetadataRequest{
+			OrganizationId: orgId,
+		})
+		require.NoError(ttt, err)
+		require.Len(ttt, listOrgMetadataRes.GetMetadata(), 4)
+	}, retryDuration, tick, "timeout waiting for expected organizations being created")
 
 	_, err := Client.SetOrganizationMetadata(CTX, &v2beta_org.SetOrganizationMetadataRequest{
 		OrganizationId: orgId,

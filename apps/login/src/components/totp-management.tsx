@@ -1,6 +1,6 @@
 "use client";
 
-import { removeManagedTOTP } from "@/lib/server/totp-management";
+import { removeManagedTOTP } from "@/lib/actions/totp-management";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

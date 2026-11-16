@@ -284,3 +284,11 @@ func WithExecutionQueueOption(queue eventstore.ExecutionQueue) EventstoreOption 
 		es.queue = queue
 	}
 }
+
+type EventstoreOption func(*Eventstore)
+
+func WithExecutionQueueOption(queue eventstore.ExecutionQueue) EventstoreOption {
+	return func(es *Eventstore) {
+		es.queue = queue
+	}
+}

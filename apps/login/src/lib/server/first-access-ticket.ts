@@ -31,6 +31,7 @@ export type FirstAccessTicket = {
   resetCode: string;
   loginName: string;
   organization?: string;
+  defaultOrganization?: string;
   requestId?: string;
   /** Password attempts made against this ticket; see takeFirstAccessTicket. */
   attempts: number;

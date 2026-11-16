@@ -175,6 +175,7 @@ Errors:
         NotExisting: "OTP (OneTimePassword) de autenticação multifator não existe"
         NotReady: "OTP (OneTimePassword) de autenticação multifator não está pronto"
         InvalidCode: "Código inválido"
+        Reused: "Este código já foi utilizado. Aguarde um novo código"
       U2F:
         NotExisting: "U2F não existe"
       Passwordless:
@@ -203,6 +204,7 @@ Errors:
     AlreadyActive: "Organização já está ativa"
     Empty: "Organização está vazia"
     NotFound: "Organização não encontrada"
+    NotActive: "A organização não está ativa"
     NotChanged: "Organização não alterada"
     DefaultOrgNotDeletable: "A organização padrão não pode ser excluída"
     ZitadelOrgNotDeletable: "A organização com o projeto Zitadel não pode ser excluída"
@@ -325,6 +327,7 @@ Errors:
       APIAuthMethodNoSecret: "O método de autenticação da API escolhido não requer um segredo"
       AuthMethodNoPrivateKeyJWT: "O método de autenticação escolhido não requer uma chave"
       ClientSecretInvalid: "O segredo do cliente é inválido"
+      ClientSecretNotSet: "O segredo do cliente não está definido"
       Key:
         AlreadyExisting: "Chave do aplicativo já existente"
         NotFound: "Chave do aplicativo não encontrada"
@@ -539,6 +542,7 @@ Errors:
     NotExisting: "A solicitação de autenticação não existe"
     WrongLoginClient: "A solicitação de autenticação foi criada por outro cliente de login"
     AlreadyHandled: "O pedido de autenticação já foi processado"
+    NotAuthenticated: "O usuário não está autenticado"
   OIDCSession:
     RefreshTokenInvalid: "O Refresh Token é inválido"
     Token:
@@ -761,6 +765,7 @@ EventTypes:
           check:
             succeeded: "Verificação de OTP de autenticação multifator bem-sucedida"
             failed: "Verificação de OTP de autenticação multifator falhou"
+            reused: "Código de OTP de autenticação multifator reutilizado"
           sms:
             added: "Adicionado OTP SMS multifator"
             removed: "OTP SMS multifator removido"

@@ -1,22 +1,19 @@
 import { Alert } from "@/components/alert";
 import { BackButton } from "@/components/back-button";
-import { Button, ButtonVariants } from "@/components/button";
 import { DynamicTheme } from "@/components/dynamic-theme";
+import { OTPAddForm } from "@/components/otp-add-form";
 import { TotpRegister } from "@/components/totp-register";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
-import { getSessionCookieById } from "@/lib/cookies";
 import { getEnrollmentAuthorizationError } from "@/lib/server/enrollment-guard";
-import { getServiceConfig } from "@/lib/service-url";
-import { loadMostRecentSession } from "@/lib/session";
-import { addOTPEmail, addOTPSMS, getBrandingSettings, getLoginSettings, getSession, registerTOTP } from "@/lib/zitadel";
+import { getServiceConfig } from "@/lib/server/service-url";
+import { loadMostRecentSession, loadSessionById } from "@/lib/server/session";
+import { getBrandingSettings, getLoginSettings, registerTOTP } from "@/lib/server/zitadel";
 import { timestampDate } from "@zitadel/client";
 import { Session } from "@zitadel/proto/zitadel/session/v2/session_pb";
 import { SecondFactorType } from "@zitadel/proto/zitadel/settings/v2/login_settings_pb";
 import { RegisterTOTPResponse } from "@zitadel/proto/zitadel/user/v2/user_service_pb";
 import { headers } from "next/headers";
-import Link from "next/link";
-import { redirect } from "next/navigation";
 
 function isSessionValidForTOTPSetup(session: Session): boolean {
   const hasVerifiedFactor = Boolean(
@@ -42,36 +39,23 @@ export default async function Page(props: {
   const _headers = await headers();
   const { serviceConfig } = getServiceConfig(_headers);
 
-  let session: Session | undefined;
-  if (method === "time-based" && sessionId !== undefined) {
-    const sessionCookie = await getSessionCookieById({ sessionId });
-    if (!sessionCookie) {
-      throw new Error("No selected session found");
-    }
+  // Bind every enrollment method to the selected signed-cookie session when present.
+  const session = sessionId
+    ? await loadSessionById(serviceConfig, sessionId, organization)
+    : await loadMostRecentSession({
+        serviceConfig,
+        sessionParams: { loginName, organization },
+      });
 
-    const sessionResponse = await getSession({
-      serviceConfig,
-      sessionId: sessionCookie.id,
-      sessionToken: sessionCookie.token,
-    });
-    session = sessionResponse.session;
-
-    if (
-      !session ||
+  if (
+    method === "time-based" &&
+    sessionId !== undefined &&
+    (!session ||
       session.id !== sessionId ||
       (loginName !== undefined && loginName !== session.factors?.user?.loginName) ||
-      (organization !== undefined && organization !== session.factors?.user?.organizationId)
-    ) {
-      throw new Error("The selected session does not match the requested account");
-    }
-  } else {
-    session = await loadMostRecentSession({
-      serviceConfig,
-      sessionParams: {
-        loginName,
-        organization,
-      },
-    });
+      (organization !== undefined && organization !== session.factors?.user?.organizationId))
+  ) {
+    throw new Error("The selected session does not match the requested account");
   }
 
   if (method === "time-based" && (!session || !session.factors?.user?.id || !isSessionValidForTOTPSetup(session))) {
@@ -98,6 +82,8 @@ export default async function Page(props: {
     if (enrollmentError) {
       error = new Error(enrollmentError);
     } else if (method === "time-based") {
+      // registering only creates a pending secret, which is not used for authentication until
+      // the user verified a code from it, so it's safe to do while rendering
       await registerTOTP({ serviceConfig, userId: session.factors.user.id })
         .then((resp) => {
           if (resp) {
@@ -107,21 +93,11 @@ export default async function Page(props: {
         .catch((err) => {
           error = err;
         });
-    } else if (method === "sms") {
-      await addOTPSMS({ serviceConfig, userId: session.factors.user.id }).catch((_error) => {
-        // TODO: Throw this error?
-        new Error("Could not add OTP via SMS");
-      });
-    } else if (method === "email") {
-      await addOTPEmail({ serviceConfig, userId: session.factors.user.id }).catch((_error) => {
-        // TODO: Throw this error?
-        new Error("Could not add OTP via Email");
-      });
-    } else {
+    } else if (method !== "sms" && method !== "email") {
+      // OTP via SMS and email are only added on explicit confirmation of the user (see OTPAddForm),
+      // never while rendering, so that a link alone can't change the second factors of a user
       throw new Error("Invalid method");
     }
-  } else {
-    throw new Error("No session found");
   }
 
   const paramsToContinue = new URLSearchParams({});
@@ -142,11 +118,6 @@ export default async function Page(props: {
       paramsToContinue.append("requestId", requestId);
     }
     urlToContinue = `/otp/${method}?` + paramsToContinue;
-
-    // immediately check the OTP on the next page if sms or email was set up
-    if (method && ["email", "sms"].includes(method)) {
-      return redirect(urlToContinue);
-    }
   } else if (requestId?.startsWith("device_")) {
     // device flows are completed on the consent screen, never by navigating to /signedin
     paramsToContinue.append("requestId", requestId);
@@ -174,15 +145,11 @@ export default async function Page(props: {
           <p className="ztdl-p">
             <Translated i18nKey="set.totpRegisterDescription" namespace="otp" />
           </p>
-        ) : (
+        ) : session && !error && (method === "email" || method === "sms") ? (
           <p className="ztdl-p">
-            {method === "email"
-              ? "Code via email was successfully added."
-              : method === "sms"
-                ? "Code via SMS was successfully added."
-                : ""}
+            <Translated i18nKey={method === "email" ? "set.emailAddDescription" : "set.smsAddDescription"} namespace="otp" />
           </p>
-        )}
+        ) : null}
 
         {!session && (
           <div className="py-4">
@@ -223,16 +190,16 @@ export default async function Page(props: {
               loginSettings={loginSettings}
             ></TotpRegister>
           </div>
+        ) : session && !error && (method === "email" || method === "sms") ? (
+          <OTPAddForm
+            method={method}
+            sessionId={session.id}
+            urlToContinue={urlToContinue}
+            checkAfter={checkAfter === "true"}
+          ></OTPAddForm>
         ) : (
           <div className="mt-8 flex w-full flex-row items-center">
             <BackButton />
-            <span className="flex-grow"></span>
-
-            <Link href={urlToContinue}>
-              <Button type="submit" className="self-end" variant={ButtonVariants.Primary}>
-                <Translated i18nKey="set.submit" namespace="otp" />
-              </Button>
-            </Link>
           </div>
         )}
       </div>

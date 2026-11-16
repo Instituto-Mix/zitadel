@@ -626,6 +626,44 @@ func runListSessionsTestCases(t *testing.T, env listSessionsEnv) {
 				},
 			},
 		},
+		{
+			name: "list sessions, expiration date query, ok",
+			args: args{
+				IAMOwnerCTX,
+				&session.ListSessionsRequest{},
+				func(ctx context.Context, t *testing.T, request *session.ListSessionsRequest) []*sessionAttr {
+					info := createSession(ctx, t, User.GetUserId(), "useragent", durationpb.New(time.Minute*5), map[string][]byte{"key": []byte("value")})
+					request.Queries = append(request.Queries,
+						&session.SearchQuery{Query: &session.SearchQuery_IdsQuery{IdsQuery: &session.IDsQuery{Ids: []string{info.ID}}}},
+						&session.SearchQuery{Query: &session.SearchQuery_ExpirationDateQuery{
+							ExpirationDateQuery: &session.ExpirationDateQuery{ExpirationDate: timestamppb.Now(),
+								Method: objpb.TimestampQueryMethod_TIMESTAMP_QUERY_METHOD_GREATER_OR_EQUALS,
+							}}})
+					return []*sessionAttr{info}
+				},
+			},
+			wantExpirationWindow: time.Minute * 5,
+			wantFactors:          []wantFactor{wantUserFactor},
+			want: &session.ListSessionsResponse{
+				Details: &object.ListDetails{
+					TotalResult: 1,
+					Timestamp:   timestamppb.Now(),
+				},
+				Sessions: []*session.Session{
+					{
+						Metadata: map[string][]byte{"key": []byte("value")},
+						UserAgent: &session.UserAgent{
+							FingerprintId: gu.Ptr("useragent"),
+							Ip:            gu.Ptr("1.2.3.4"),
+							Description:   gu.Ptr("Description"),
+							Header: map[string]*session.UserAgent_HeaderValues{
+								"foo": {Values: []string{"foo", "bar"}},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

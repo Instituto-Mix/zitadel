@@ -1,4 +1,4 @@
-import { sendLoginname } from "@/lib/server/loginname";
+import { sendLoginname } from "@/lib/actions/loginname";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { UsernameForm } from "./username-form";
@@ -13,7 +13,7 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-vi.mock("@/lib/server/loginname", () => ({
+vi.mock("@/lib/actions/loginname", () => ({
   sendLoginname: vi.fn().mockResolvedValue({ redirect: "/password" }),
 }));
 

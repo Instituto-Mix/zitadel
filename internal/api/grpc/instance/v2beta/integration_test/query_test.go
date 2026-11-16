@@ -192,6 +192,7 @@ func TestListCustomDomains(t *testing.T) {
 	inst := integration.NewInstance(ctxWithSysAuthZ)
 	orgOwnerCtx := inst.WithAuthorization(context.Background(), integration.UserTypeOrgOwner)
 	d1, d2 := "custom."+integration.DomainName(), "custom."+integration.DomainName()
+
 	_, err := inst.Client.InstanceV2Beta.AddCustomDomain(ctxWithSysAuthZ, &instance.AddCustomDomainRequest{InstanceId: inst.ID(), Domain: d1})
 	require.Nil(t, err)
 	_, err = inst.Client.InstanceV2Beta.AddCustomDomain(ctxWithSysAuthZ, &instance.AddCustomDomainRequest{InstanceId: inst.ID(), Domain: d2})
@@ -296,6 +297,7 @@ func TestListTrustedDomains(t *testing.T) {
 	inst := integration.NewInstance(ctxWithSysAuthZ)
 	orgOwnerCtx := inst.WithAuthorization(context.Background(), integration.UserTypeOrgOwner)
 	d1, d2 := "trusted."+integration.DomainName(), "trusted."+integration.DomainName()
+
 	_, err := inst.Client.InstanceV2Beta.AddTrustedDomain(ctxWithSysAuthZ, &instance.AddTrustedDomainRequest{InstanceId: inst.ID(), Domain: d1})
 	require.Nil(t, err)
 	_, err = inst.Client.InstanceV2Beta.AddTrustedDomain(ctxWithSysAuthZ, &instance.AddTrustedDomainRequest{InstanceId: inst.ID(), Domain: d2})

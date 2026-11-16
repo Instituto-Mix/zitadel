@@ -16,11 +16,11 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-vi.mock("@/lib/server/verify", () => ({
+vi.mock("@/lib/actions/verify", () => ({
   verifyTOTP: mocks.verifyTOTP,
 }));
 
-vi.mock("@/lib/client", () => ({
+vi.mock("@/lib/actions/flow", () => ({
   completeFlowOrGetUrl: mocks.completeFlowOrGetUrl,
 }));
 

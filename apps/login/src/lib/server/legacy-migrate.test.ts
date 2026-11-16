@@ -9,11 +9,11 @@ vi.mock("./auth-backend-token", () => ({
 // Capture everything handed to the logger. winston's own Console transport
 // flushes asynchronously, so inspecting the log call arguments is both the
 // deterministic check and the one that matches what this module controls.
-const logCalls: any[][] = [];
-vi.mock("@/lib/logger", () => {
+const logCalls: unknown[][] = [];
+vi.mock("@/lib/server/logger", () => {
   const record =
     () =>
-    (...args: any[]) => {
+    (...args: unknown[]) => {
       logCalls.push(args);
     };
   return {
