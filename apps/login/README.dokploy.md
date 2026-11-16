@@ -212,6 +212,7 @@ Copy `.env.dokploy.example` into the Dokploy service's environment. Key vars:
 | Var | Required | Meaning |
 |---|---|---|
 | `ZITADEL_API_URL` | yes | Base URL of the Zitadel API/issuer this login app talks to. |
+| `ZITADEL_INSTANCE_HOST` | no | API instance host override. Defaults to the host in `ZITADEL_API_URL`. Includes the port, but excludes the scheme and path. For backend RPCs, browser headers do not select the instance host or set `publicHost`. |
 | `ZITADEL_SERVICE_USER_TOKEN` | yes | Service user PAT for the login client. (Or mount a file and set `ZITADEL_SERVICE_USER_TOKEN_FILE`.) |
 | `ZITADEL_SESSION_COOKIE_SECRET` | recommended | Dedicated runtime secret for signed session cookies and verification, IdP-link and device-code proofs. Each value must contain at least 32 characters. All replicas must use identical values. See rotation below. |
 | `ZITADEL_PUBLIC_HOST` | recommended | Pins the public host (`hostname[:port]`, no scheme/path) used for login-generated links (reset, verification, invite, IdP callbacks, OTP email template) and WebAuthn domains, ignoring `x-zitadel-public-host`, `x-zitadel-forward-host`, `x-forwarded-host` and `Host`. Unset/empty keeps header-based resolution. It does not sanitize headers forwarded to the Zitadel API or caller-supplied templates, so keep ingress header sanitisation too. Set to `entrar.institutomix.com.br` in production. |

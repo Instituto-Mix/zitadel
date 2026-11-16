@@ -1,41 +1,34 @@
 import "server-only";
 
-import { getInstanceHost, getPublicHost } from "@/lib/server/host";
+import { getPublicHost } from "@/lib/server/host";
 import { ServiceConfig } from "@/lib/server/zitadel";
 import { ReadonlyHeaders } from "next/dist/server/web/spec-extension/adapters/headers";
 import { NextRequest } from "next/server";
 
 /**
- * Extracts the service URL based on deployment mode and configuration.
- *
- * Priority:
- * 1. ZITADEL_API_URL (required) - Used by both self-hosted and multi-tenant
- * 2. x-zitadel-forward-host (multi-tenant only) - Set by Zitadel proxy
- * 3. host header (multi-tenant fallback) - For dynamic host resolution
- *
- * @param headers - Request headers
- * @returns Object containing the service Configuration
- * @throws Error if the service Configuration could not be determined
+ * Configures API routing for this standalone Login deployment.
+ * ZITADEL_INSTANCE_HOST overrides the instance host derived from ZITADEL_API_URL.
+ * Browser-facing hosts remain independent of the API instance host.
  */
 
 function stripProtocol(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }
 
-export function getServiceConfig(headers: ReadonlyHeaders): { serviceConfig: ServiceConfig } {
+export function getServiceConfig(_headers: ReadonlyHeaders): { serviceConfig: ServiceConfig } {
   if (!process.env.ZITADEL_API_URL) {
     throw new Error("ZITADEL_API_URL is not set");
   }
 
-  // use forwarded host from proxy - headers are forwarded to the APIs.
-  const instanceHost = getInstanceHost(headers);
-  const publicHost = getPublicHost(headers);
+  // The separate Login origin is not a ZITADEL instance domain.
+  // Do not forward browser hosts as API instance or public-host overrides.
+  const instanceHostSource = process.env.ZITADEL_INSTANCE_HOST || process.env.ZITADEL_API_URL;
+  const instanceHost = stripProtocol(instanceHostSource).replace(/\/.*$/, "");
 
   return {
     serviceConfig: {
       baseUrl: process.env.ZITADEL_API_URL,
-      ...(instanceHost && { instanceHost: stripProtocol(instanceHost) }),
-      ...(publicHost && { publicHost: stripProtocol(publicHost) }),
+      ...(instanceHost && { instanceHost }),
     },
   };
 }
