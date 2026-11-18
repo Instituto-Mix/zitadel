@@ -1,7 +1,12 @@
-import { accessSync, constants, readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { createServer, request as httpsRequest } from "node:https";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// A new server process must earn startup readiness even when the container filesystem survives.
+rmSync(join(tmpdir(), `zitadel-login-startup-ready-${process.env.PORT || "3000"}`), { force: true });
 
 /**
  * Parses a Go-style duration string into milliseconds.

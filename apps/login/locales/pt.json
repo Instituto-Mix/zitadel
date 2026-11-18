@@ -90,6 +90,7 @@
       "noCodeReceived": "Não recebeu o código?",
       "resend": "Reenviar código",
       "submit": "Continuar",
+      "signIn": "Entrar",
       "labels": {
         "code": "Código",
         "newPassword": "Nova Senha",
@@ -100,10 +101,14 @@
         "newPassword": "Você precisa fornecer uma senha!",
         "confirmPassword": "Este campo é obrigatório"
       },
+      "info": {
+        "passwordChanged": "Sua senha foi alterada."
+      },
       "errors": {
         "couldNotSetPassword": "Não foi possível definir a senha",
         "couldNotResetPassword": "Não foi possível redefinir a senha",
-        "couldNotVerifyPassword": "Não foi possível verificar a senha"
+        "couldNotVerifyPassword": "Não foi possível verificar a senha",
+        "signInFailed": "Não foi possível entrar automaticamente. Tente entrar novamente com sua nova senha. Se o problema continuar, entre em contato com o suporte."
       }
     },
     "change": {

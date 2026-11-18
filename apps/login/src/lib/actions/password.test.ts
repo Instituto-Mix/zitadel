@@ -859,7 +859,35 @@ describe("changePassword", () => {
     },
   );
 
-  test("should redeem a reset code for a usable registered email", async () => {
+  test.each([UserState.ACTIVE, UserState.LOCKED])(
+    "should return a successful reset-code password write for user state %s",
+    async (state) => {
+      mockGetUserByID.mockResolvedValue({
+        user: {
+          userId: "user123",
+          state,
+          type: { case: "human", value: { email: { email: "user@example.com" } } },
+        },
+      });
+      mockSetUserPassword.mockResolvedValue({});
+
+      const result = await changePassword({
+        userId: "user123",
+        code: "existing-reset-code",
+        password: "newpassword",
+      });
+
+      expect(result).toEqual({});
+      expect(mockSetUserPassword).toHaveBeenCalledExactlyOnceWith({
+        serviceConfig: { baseUrl: "https://api.example.com" },
+        userId: "user123",
+        password: "newpassword",
+        code: "existing-reset-code",
+      });
+    },
+  );
+
+  test("should preserve a returned reset-code password-write error", async () => {
     mockGetUserByID.mockResolvedValue({
       user: {
         userId: "user123",
@@ -867,7 +895,7 @@ describe("changePassword", () => {
         type: { case: "human", value: { email: { email: "user@example.com" } } },
       },
     });
-    mockSetUserPassword.mockResolvedValue({});
+    mockSetUserPassword.mockResolvedValue({ error: "Password does not meet the password policy." });
 
     const result = await changePassword({
       userId: "user123",
@@ -875,13 +903,69 @@ describe("changePassword", () => {
       password: "newpassword",
     });
 
-    expect(result).toEqual({});
-    expect(mockSetUserPassword).toHaveBeenCalledExactlyOnceWith({
-      serviceConfig: { baseUrl: "https://api.example.com" },
-      userId: "user123",
-      password: "newpassword",
-      code: "existing-reset-code",
+    expect(result).toEqual({ error: "Password does not meet the password policy." });
+  });
+
+  test("should preserve a rejected reset-code password-write error", async () => {
+    mockGetUserByID.mockResolvedValue({
+      user: {
+        userId: "user123",
+        state: UserState.ACTIVE,
+        type: { case: "human", value: { email: { email: "user@example.com" } } },
+      },
     });
+    const error = new ConnectError("Invalid or expired reset code", Code.InvalidArgument);
+    mockSetUserPassword.mockRejectedValue(error);
+
+    await expect(
+      changePassword({
+        userId: "user123",
+        code: "existing-reset-code",
+        password: "newpassword",
+      }),
+    ).rejects.toBe(error);
+  });
+
+  test("should reject a reset code for an initial user without writing a password", async () => {
+    mockGetUserByID.mockResolvedValue({
+      user: {
+        userId: "user123",
+        state: UserState.INITIAL,
+        type: { case: "human", value: { email: { email: "user@example.com" } } },
+      },
+    });
+
+    const result = await changePassword({
+      userId: "user123",
+      code: "existing-reset-code",
+      password: "newpassword",
+    });
+
+    expect(result).toEqual({ error: "errors.userInitialStateNotSupported" });
+    expect(mockSetUserPassword).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { authMethodTypes: [AuthenticationMethodType.PASSWORD], expectedError: "errors.codeOrVerificationRequired" },
+    { authMethodTypes: [], expectedError: "errors.verificationRequired" },
+  ])("should refuse unverified no-code setup ($expectedError)", async ({ authMethodTypes, expectedError }) => {
+    mockGetUserByID.mockResolvedValue({
+      user: {
+        userId: "user123",
+        state: UserState.ACTIVE,
+        type: { case: "human", value: { email: { email: "user@example.com" } } },
+      },
+    });
+    vi.mocked(listAuthenticationMethodTypes).mockResolvedValue({
+      $typeName: "zitadel.user.v2.ListAuthenticationMethodTypesResponse",
+      authMethodTypes,
+    });
+    vi.mocked(checkUserVerification).mockResolvedValue(false);
+
+    const result = await changePassword({ userId: "user123", password: "newpassword" });
+
+    expect(result).toEqual({ error: expectedError });
+    expect(mockSetUserPassword).not.toHaveBeenCalled();
   });
 
   test.each(["legacy@invalido.troque", undefined])(

@@ -7,8 +7,9 @@ import { create } from "@zitadel/client";
 import { ChecksSchema } from "@zitadel/proto/zitadel/session/v2/session_service_pb";
 import { PasswordComplexitySettings } from "@zitadel/proto/zitadel/settings/v2/password_settings_pb";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FieldValues, useForm } from "react-hook-form";
 import { Alert, AlertType } from "./alert";
 import { AutoSubmitForm } from "./auto-submit-form";
@@ -48,7 +49,7 @@ export function SetPasswordForm({
   code,
   codeRequired,
 }: Props) {
-  const { register, handleSubmit, watch, formState } = useForm<Inputs>({
+  const { register, handleSubmit, watch, formState, reset } = useForm<Inputs>({
     mode: "onChange",
     defaultValues: {
       code: code ?? "",
@@ -58,8 +59,16 @@ export function SetPasswordForm({
   const t = useTranslations("password");
 
   const [loading, setLoading] = useState<boolean>(false);
+  const [passwordChanged, setPasswordChanged] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [samlData, setSamlData] = useState<{ url: string; fields: Record<string, string> } | null>(null);
+  const outcomeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (passwordChanged) {
+      outcomeRef.current?.focus();
+    }
+  }, [passwordChanged]);
 
   const router = useRouter();
 
@@ -89,10 +98,12 @@ export function SetPasswordForm({
 
   async function submitPassword(values: Inputs) {
     setLoading(true);
+    setError("");
+    const password = values.password;
 
     let payload: { userId: string; password: string; code?: string; organization?: string } = {
       userId: userId,
-      password: values.password,
+      password,
       organization,
     };
 
@@ -119,14 +130,8 @@ export function SetPasswordForm({
       return;
     }
 
-    const params = new URLSearchParams({});
-
-    if (loginName) {
-      params.append("loginName", loginName);
-    }
-    if (organization) {
-      params.append("organization", organization);
-    }
+    reset({ code: "", password: "", confirmPassword: "" });
+    setPasswordChanged(true);
 
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait for a second to avoid eventual consistency issues with an initial password being set
 
@@ -134,17 +139,19 @@ export function SetPasswordForm({
       loginName,
       organization,
       checks: create(ChecksSchema, {
-        password: { password: values.password },
+        password: { password },
       }),
       requestId,
-    }).catch(() => {
-      setError(t("set.errors.couldNotVerifyPassword"));
-      setLoading(false);
-      return;
-    });
+    }).catch(() => ({ error: t("set.errors.couldNotVerifyPassword") }));
 
     setLoading(false);
-    handleServerActionResponse(passwordResponse as any, router, setSamlData, setError);
+    if (
+      !passwordResponse ||
+      typeof passwordResponse !== "object" ||
+      !handleServerActionResponse(passwordResponse, router, setSamlData, setError)
+    ) {
+      setError(t("set.errors.couldNotVerifyPassword"));
+    }
 
     return;
   }
@@ -153,6 +160,53 @@ export function SetPasswordForm({
 
   const watchPassword = watch("password", "");
   const watchConfirmPassword = watch("confirmPassword", "");
+
+  if (passwordChanged) {
+    const params = new URLSearchParams();
+    if (loginName) {
+      params.append("loginName", loginName);
+    }
+    if (organization) {
+      params.append("organization", organization);
+    }
+    if (requestId) {
+      params.append("requestId", requestId);
+    }
+
+    return (
+      <>
+        {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
+        <div ref={outcomeRef} tabIndex={-1} className="w-full space-y-4 pt-4">
+          <div role="status">
+            <Alert type={AlertType.INFO}>
+              <Translated i18nKey="set.info.passwordChanged" namespace="password" />
+            </Alert>
+          </div>
+          {loading && (
+            <span aria-hidden="true">
+              <Spinner className="h-5 w-5" />
+            </span>
+          )}
+          {error && (
+            <div role="alert" className="space-y-4">
+              <Alert>
+                <span className="block">
+                  <Translated i18nKey="set.errors.signInFailed" namespace="password" />
+                </span>
+                <span className="mt-2 block">{error}</span>
+              </Alert>
+              <Link
+                href={`/loginname?${params}`}
+                className="border-divider-light dark:border-divider-dark block rounded-md border px-5 py-3 font-medium hover:shadow-lg hover:dark:bg-white/10"
+              >
+                <Translated i18nKey="set.signIn" namespace="password" />
+              </Link>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
 
   const hasMinLength = passwordComplexitySettings && watchPassword?.length >= passwordComplexitySettings.minLength;
   const hasSymbol = symbolValidator(watchPassword);
@@ -170,7 +224,6 @@ export function SetPasswordForm({
 
   return (
     <>
-      {samlData && <AutoSubmitForm url={samlData.url} fields={samlData.fields} />}
       <form className="w-full" onSubmit={handleSubmit(submitPassword)}>
         <div className="mb-4 grid grid-cols-1 gap-4 pt-4">
           <input

@@ -42,8 +42,7 @@ const ORGANIZATION = "org-1";
 const PUBLIC_HOST = "login.example.test";
 const SERVICE_CONFIG = {
   baseUrl: "https://id.example.test",
-  instanceHost: PUBLIC_HOST,
-  publicHost: PUBLIC_HOST,
+  instanceHost: "id.example.test",
 };
 const COMMAND = { loginName: LOGIN_NAME, organization: ORGANIZATION, requestId: "oidc_request-1" };
 const SESSION_COOKIE = {
@@ -81,6 +80,7 @@ describe.each([
     vi.setSystemTime(NOW);
     vi.stubEnv("ZITADEL_SESSION_COOKIE_SECRET", "email-actions-test-secret-at-least-32-characters");
     vi.stubEnv("ZITADEL_API_URL", SERVICE_CONFIG.baseUrl);
+    vi.stubEnv("ZITADEL_INSTANCE_HOST", undefined);
     vi.stubEnv("ZITADEL_PUBLIC_HOST", PUBLIC_HOST);
     vi.stubEnv("EMAIL_UPDATE_MARK_VERIFIED", "false");
     vi.stubEnv("EMAIL_VERIFICATION", "false");

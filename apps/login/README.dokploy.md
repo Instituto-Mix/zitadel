@@ -140,6 +140,20 @@ authenticated password changes and the separate ERP-verified first-access bridge
 (`completeFirstAccess`) are unchanged. The registered destination for permitted
 resets is masked server-side, not added unmasked to client props or URLs.
 
+After a confirmed password write, `SetPasswordForm` clears the entered code and
+passwords. Automatic sign-in still runs after the existing two-second delay.
+If sign-in then fails, the page acknowledges the changed password separately
+from the sign-in error and retry/support guidance, with a contextual sign-in link.
+The completed form and resend controls are no longer offered in this view; this
+does not prevent reopening or reloading a reset link.
+Failed password writes remain on the reset form; successful verification, MFA,
+redirect and SAML continuations are unchanged. This does not unlock accounts or
+change authentication policy.
+
+The focused regressions use synthetic responses. They do not establish why a
+particular account could not sign in, whether a production reset completed, or
+whether an account is locked or unlocked.
+
 ---
 
 ## Files
@@ -317,8 +331,60 @@ container run --rm -p 3000:3000 \
   im-login:latest
 ```
 
-The server listens on port **3000**. Health endpoint: **`/ready`** (or
-`<NEXT_PUBLIC_BASE_PATH>/ready` if a base path was set). A `HEALTHCHECK` is baked in.
+The server listens on port **3000**. Both probe routes use
+`<NEXT_PUBLIC_BASE_PATH>` when the image was built with a base path:
+
+- **`/healthy` is local liveness:** HTTP 200 once the server can answer requests;
+  it does not check ZITADEL or render the login page.
+- **`/ready` is current backend/signing readiness:** it checks the usable session
+  signing secret and the ZITADEL API's unauthenticated `/debug/ready` endpoint.
+  It does not by itself prove login-page server rendering.
+
+### Container startup readiness
+
+The production image runs `node /app/healthcheck.mjs /ready --startup`. The
+upstream and FIPS images use the same command with `/ui/v2/login/ready`.
+For each new standalone server process, the first successful probe requires:
+
+1. HTTP 200 from `/ready`, preserving its signing-secret and backend checks.
+2. A complete HTTP 200 HTML response from the real `/loginname` route at the
+   same base path, containing a local-login or identity-provider form and no
+   React server-rendering error markers. An HTTP 200 error page, empty page,
+   redirect, incomplete HTML response, or failed stream does not pass.
+
+The probe only issues GET requests. It does not submit credentials or mutate
+accounts. Rendering that real page uses the normal authenticated settings API
+calls, so this extra proof runs only until startup first succeeds, not on every
+healthcheck. Both requests share a five-second deadline inside Docker's
+ten-second healthcheck timeout.
+
+After success, the probe records an app-owned marker in the runtime temporary
+directory, scoped to the server port. Subsequent container healthchecks request
+only `/healthy`: a later ZITADEL outage can make `/ready` return 503 without
+restarting an otherwise-serving login container. The standalone server wrapper
+removes that marker **before every process startup**, including before API
+waiting or TLS setup. The image entrypoint uses `exec` to launch that wrapper;
+an in-place container restart or direct wrapper restart cannot reuse a prior
+process's success. Do not share the temporary directory between containers.
+
+This startup gate is necessary release evidence, not proof of the live
+orchestrator's traffic or draining behavior. Inspect the actual service
+healthcheck (including overrides), replicas, update order, parallelism, and
+proxy behavior. Prove that a candidate which fails startup readiness is not
+promoted and does not drain the serving task before claiming a safe
+`start-first` rollout. Historical settings and an image healthcheck alone do not
+establish that behavior; platform changes require separate approval.
+
+### Pull-request CI
+
+`.github/workflows/ci.yml` runs the existing Nx `test` and `build` targets for
+affected projects on GitHub-hosted Ubuntu, then checks for code-generation
+changes. Nx Cloud is disabled for this fork, and the Codecov upload token is
+optional. Keep `lint_test_build.yml` with this entry point during upstream merges.
+
+The upstream `pack`/`release`/`version` workflows are not this fork's release path.
+Pull-request CI does not publish images or deploy; the supported release workflow
+remains `build-login-image.yml`, described below.
 
 ### Entrar release playbook
 

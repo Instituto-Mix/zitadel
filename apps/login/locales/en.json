@@ -90,6 +90,7 @@
       "noCodeReceived": "Didn't receive a code?",
       "resend": "Resend code",
       "submit": "Continue",
+      "signIn": "Sign in",
       "labels": {
         "code": "Code",
         "newPassword": "New Password",
@@ -100,10 +101,14 @@
         "newPassword": "You have to provide a password!",
         "confirmPassword": "This field is required"
       },
+      "info": {
+        "passwordChanged": "Your password has been changed."
+      },
       "errors": {
         "couldNotSetPassword": "Could not set password",
         "couldNotResetPassword": "Could not reset password",
-        "couldNotVerifyPassword": "Could not verify password"
+        "couldNotVerifyPassword": "Could not verify password",
+        "signInFailed": "Automatic sign-in could not be completed. Try signing in again with your new password. If you still cannot sign in, contact support."
       }
     },
     "change": {
