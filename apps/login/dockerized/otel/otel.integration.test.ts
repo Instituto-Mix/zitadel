@@ -1,3 +1,4 @@
+import { SpanStatusCode, TraceFlags } from "@opentelemetry/api";
 import * as fs from "fs";
 import * as path from "path";
 import type { StartedNetwork } from "testcontainers";
@@ -43,6 +44,90 @@ function readCapturedHeaders(): Array<{ traceparent: string | null; url: string;
   } catch {
     return [];
   }
+}
+
+type ExportedSpan = {
+  name: string;
+  kind: number;
+  traceId: string;
+  spanId: string;
+  flags: number;
+  status: { code?: number };
+  attributes: Array<{ key: string; value: { stringValue?: string; intValue?: string } }>;
+};
+
+type ExportedLog = {
+  body: { stringValue: string };
+  traceId: string;
+  spanId: string;
+  flags: number;
+};
+
+const HTTP_INSTRUMENTATION_SCOPE = "@opentelemetry/instrumentation-http";
+
+function readSpans(scopeName?: string): ExportedSpan[] {
+  const exports: Array<{
+    resourceSpans: Array<{
+      scopeSpans: Array<{ scope: { name: string }; spans: ExportedSpan[] }>;
+    }>;
+  }> = readTraces()
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+
+  return exports
+    .flatMap((record) => record.resourceSpans)
+    .flatMap((resource) => resource.scopeSpans)
+    .filter((scope) => scopeName === undefined || scope.scope.name === scopeName)
+    .flatMap((scope) => scope.spans);
+}
+
+function readHttpServerSpan(pathname: string): ExportedSpan {
+  const span = readSpans(HTTP_INSTRUMENTATION_SCOPE).find(
+    (span) =>
+      // OTLP's SERVER kind is 2 (the API enum is offset by one).
+      span.kind === 2 &&
+      span.attributes.some((attribute) => attribute.key === "url.path" && attribute.value.stringValue === pathname),
+  );
+  expect(span, `HTTP server span for ${pathname}`).toBeDefined();
+  return span!;
+}
+
+function readTestLogs(): ExportedLog[] {
+  const exports: Array<{
+    resourceLogs: Array<{
+      scopeLogs: Array<{ scope: { name: string }; logRecords: ExportedLog[] }>;
+    }>;
+  }> = readLogs()
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+
+  return exports
+    .flatMap((record) => record.resourceLogs)
+    .flatMap((resource) => resource.scopeLogs)
+    .filter((scope) => scope.scope.name === "@opentelemetry/winston-transport")
+    .flatMap((scope) => scope.logRecords)
+    .filter(
+      (record) =>
+        record.body.stringValue === "OTEL test endpoint called" || record.body.stringValue === "OTEL test completed successfully",
+    );
+}
+
+function readPrometheusSamples(text: string, metricName: string): Array<{ labels: Record<string, string>; value: number }> {
+  return text
+    .split("\n")
+    .filter((line) => line.startsWith(`${metricName}{`))
+    .map((line) => {
+      const labelsEnd = line.lastIndexOf("}");
+      const labels = Object.fromEntries(
+        Array.from(line.slice(metricName.length + 1, labelsEnd).matchAll(/(\w+)="((?:\\.|[^"\\])*)"/g), ([, key, value]) => [
+          key,
+          JSON.parse(`"${value}"`) as string,
+        ]),
+      );
+      return { labels, value: Number(line.slice(labelsEnd + 1).trim().split(/\s+/)[0]) };
+    });
 }
 
 async function waitForFile(filePath: string, maxAttempts = 30, delayMs = 1000): Promise<boolean> {
@@ -94,6 +179,7 @@ describe("OpenTelemetry Integration", () => {
   let loginApp: StartedTestContainer;
   let appUrl: string;
   let prometheusUrl: string;
+  let otelTestResult: { traceId: string; spanId: string };
 
   beforeAll(async () => {
     if (fs.existsSync(OUTPUT_DIR)) {
@@ -168,7 +254,9 @@ describe("OpenTelemetry Integration", () => {
     console.log(`[PORTS] APP_URL: ${appUrl}`);
     console.log(`[PORTS] PROMETHEUS_URL: ${prometheusUrl}`);
 
-    await fetch(`${appUrl}/ui/v2/login/otel-test`);
+    const testResponse = await fetch(`${appUrl}/ui/v2/login/otel-test`);
+    expect(testResponse.status).toBe(200);
+    otelTestResult = await testResponse.json();
     await fetch(`${appUrl}/ui/v2/login/loginname`, { redirect: "manual" });
     await fetch(`${appUrl}/ui/v2/login/healthy`);
     await fetch(`${appUrl}/ui/v2/login/ready`);
@@ -292,17 +380,23 @@ describe("OpenTelemetry Integration", () => {
       );
 
       it(
-        "contains net.host.name",
+        "records the requested server address",
         () => {
-          expect(readTraces()).toContain('"net.host.name"');
+          expect(readHttpServerSpan("/ui/v2/login/otel-test")).toMatchObject({
+            traceId: otelTestResult.traceId,
+            attributes: expect.arrayContaining([{ key: "server.address", value: { stringValue: new URL(appUrl).hostname } }]),
+          });
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "contains net.host.port",
+        "records the requested server port",
         () => {
-          expect(readTraces()).toContain('"net.host.port"');
+          expect(readHttpServerSpan("/ui/v2/login/otel-test")).toMatchObject({
+            traceId: otelTestResult.traceId,
+            attributes: expect.arrayContaining([{ key: "server.port", value: { intValue: new URL(appUrl).port } }]),
+          });
         },
         TEST_TIMEOUT,
       );
@@ -374,24 +468,9 @@ describe("OpenTelemetry Integration", () => {
       it(
         "HTTP instrumentation excludes /healthy",
         () => {
-          const tracesContent = readTraces();
-          const traceObjects = tracesContent
-            .split("\n")
-            .filter((line) => line.trim())
-            .map((line) => JSON.parse(line));
-
-          const allResourceSpans = traceObjects.flatMap((t) => t.resourceSpans || []);
-
-          const httpSpans = allResourceSpans
-            .flatMap((rs: { scopeSpans: Array<{ scope: { name: string }; spans: unknown[] }> }) => rs.scopeSpans)
-            .filter((ss: { scope: { name: string } }) => ss.scope.name === "@opentelemetry/instrumentation-http")
-            .flatMap((ss: { spans: unknown[] }) => ss.spans);
-          const healthySpans = httpSpans.filter(
-            (s: { attributes?: Array<{ key: string; value: { stringValue?: string } }> }) =>
-              s.attributes?.some(
-                (a: { key: string; value: { stringValue?: string } }) =>
-                  a.key === "http.target" && a.value.stringValue?.includes("/healthy"),
-              ),
+          readHttpServerSpan("/ui/v2/login/otel-test");
+          const healthySpans = readSpans(HTTP_INSTRUMENTATION_SCOPE).filter((span) =>
+            span.attributes.some((attribute) => attribute.key === "url.path" && attribute.value.stringValue?.includes("/healthy")),
           );
           expect(healthySpans).toHaveLength(0);
         },
@@ -401,24 +480,9 @@ describe("OpenTelemetry Integration", () => {
       it(
         "HTTP instrumentation excludes /ready",
         () => {
-          const tracesContent = readTraces();
-          const traceObjects = tracesContent
-            .split("\n")
-            .filter((line) => line.trim())
-            .map((line) => JSON.parse(line));
-
-          const allResourceSpans = traceObjects.flatMap((t) => t.resourceSpans || []);
-
-          const httpSpans = allResourceSpans
-            .flatMap((rs: { scopeSpans: Array<{ scope: { name: string }; spans: unknown[] }> }) => rs.scopeSpans)
-            .filter((ss: { scope: { name: string } }) => ss.scope.name === "@opentelemetry/instrumentation-http")
-            .flatMap((ss: { spans: unknown[] }) => ss.spans);
-          const readySpans = httpSpans.filter(
-            (s: { attributes?: Array<{ key: string; value: { stringValue?: string } }> }) =>
-              s.attributes?.some(
-                (a: { key: string; value: { stringValue?: string } }) =>
-                  a.key === "http.target" && a.value.stringValue?.includes("/ready"),
-              ),
+          readHttpServerSpan("/ui/v2/login/otel-test");
+          const readySpans = readSpans(HTTP_INSTRUMENTATION_SCOPE).filter((span) =>
+            span.attributes.some((attribute) => attribute.key === "url.path" && attribute.value.stringValue?.includes("/ready")),
           );
           expect(readySpans).toHaveLength(0);
         },
@@ -546,17 +610,22 @@ describe("OpenTelemetry Integration", () => {
       );
 
       it(
-        "records OK status text",
+        "leaves successful HTTP server span status unset",
         () => {
-          expect(readTraces()).toContain('"OK"');
+          const span = readHttpServerSpan("/ui/v2/login/otel-test");
+          expect(span.attributes).toContainEqual({ key: "http.response.status_code", value: { intValue: "200" } });
+          // Protobuf JSON omits the zero-valued UNSET status code.
+          expect(span.status.code ?? SpanStatusCode.UNSET).toBe(SpanStatusCode.UNSET);
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "records NOT FOUND status text",
+        "records HTTP 404 without classifying it as a server error",
         () => {
-          expect(readTraces()).toContain('"NOT FOUND"');
+          const span = readHttpServerSpan("/ui/v2/login/this-does-not-exist-404");
+          expect(span.attributes).toContainEqual({ key: "http.response.status_code", value: { intValue: "404" } });
+          expect(span.status.code ?? SpanStatusCode.UNSET).toBe(SpanStatusCode.UNSET);
         },
         TEST_TIMEOUT,
       );
@@ -759,10 +828,20 @@ describe("OpenTelemetry Integration", () => {
       );
 
       it(
-        "exposes v8js_memory_heap_limit",
+        "exposes pre-allocated V8 heap space size in bytes",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain("v8js_memory_heap_limit");
+          const text = await response.text();
+          expect(text).toContain("# TYPE v8js_memory_heap_space_size gauge");
+          expect(text).toContain("# UNIT v8js_memory_heap_space_size By");
+          const heapSpace = readPrometheusSamples(text, "v8js_memory_heap_space_size").find(
+            (sample) =>
+              sample.labels.otel_scope_name === "@opentelemetry/instrumentation-runtime-node" &&
+              sample.labels.v8js_heap_space_name === "old_space",
+          );
+          expect(heapSpace).toBeDefined();
+          expect(Number.isFinite(heapSpace!.value)).toBe(true);
+          expect(heapSpace!.value).toBeGreaterThan(0);
         },
         TEST_TIMEOUT,
       );
@@ -779,64 +858,128 @@ describe("OpenTelemetry Integration", () => {
 
     describe("HTTP Metrics", () => {
       it(
-        "exposes http_server_duration",
+        "exposes the HTTP server request duration histogram in seconds",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain("http_server_duration");
+          const text = await response.text();
+          expect(text).toContain("# TYPE http_server_request_duration histogram");
+          expect(text).toContain("# UNIT http_server_request_duration s");
+          expect(
+            readPrometheusSamples(text, "http_server_request_duration_count").some(
+              (sample) => sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE && sample.value > 0,
+            ),
+          ).toBe(true);
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "exposes http_server_duration_sum",
+        "records positive HTTP server duration sums",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain("http_server_duration_sum");
+          const samples = readPrometheusSamples(await response.text(), "http_server_request_duration_sum").filter(
+            (sample) => sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE,
+          );
+          expect(samples.length).toBeGreaterThan(0);
+          for (const sample of samples) {
+            expect(Number.isFinite(sample.value)).toBe(true);
+            expect(sample.value).toBeGreaterThan(0);
+          }
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "exposes http_server_duration_count",
+        "counts completed HTTP server requests",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain("http_server_duration_count");
+          const samples = readPrometheusSamples(await response.text(), "http_server_request_duration_count").filter(
+            (sample) => sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE,
+          );
+          expect(samples.length).toBeGreaterThan(0);
+          for (const sample of samples) {
+            expect(Number.isInteger(sample.value)).toBe(true);
+            expect(sample.value).toBeGreaterThan(0);
+          }
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "exposes http_server_duration_bucket",
+        "exports cumulative HTTP duration buckets consistent with request counts",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain("http_server_duration_bucket");
+          const text = await response.text();
+          const counts = readPrometheusSamples(text, "http_server_request_duration_count").filter(
+            (sample) => sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE,
+          );
+          const buckets = readPrometheusSamples(text, "http_server_request_duration_bucket");
+          expect(counts.length).toBeGreaterThan(0);
+          for (const count of counts) {
+            const series = buckets.filter((bucket) =>
+              Object.entries(count.labels).every(([label, value]) => bucket.labels[label] === value),
+            );
+            expect(series.find((bucket) => bucket.labels.le === "+Inf")).toMatchObject({ value: count.value });
+            const finiteBuckets = series
+              .filter((bucket) => bucket.labels.le !== "+Inf")
+              .sort((left, right) => Number(left.labels.le) - Number(right.labels.le));
+            expect(finiteBuckets.length).toBeGreaterThan(0);
+            let previousCount = 0;
+            for (const bucket of finiteBuckets) {
+              expect(Number.isFinite(Number(bucket.labels.le))).toBe(true);
+              expect(Number.isInteger(bucket.value)).toBe(true);
+              expect(bucket.value).toBeGreaterThanOrEqual(previousCount);
+              expect(bucket.value).toBeLessThanOrEqual(count.value);
+              previousCount = bucket.value;
+            }
+          }
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "records status code 200",
+        "records HTTP 200 on GET request duration counts",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain('http_status_code="200"');
+          const sample = readPrometheusSamples(await response.text(), "http_server_request_duration_count").find(
+            (sample) =>
+              sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE &&
+              sample.labels.http_request_method === "GET" &&
+              sample.labels.http_response_status_code === "200",
+          );
+          expect(sample).toBeDefined();
+          expect(sample!.value).toBeGreaterThan(0);
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "records status code 404",
+        "records HTTP 404 on GET request duration counts",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain('http_status_code="404"');
+          const sample = readPrometheusSamples(await response.text(), "http_server_request_duration_count").find(
+            (sample) =>
+              sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE &&
+              sample.labels.http_request_method === "GET" &&
+              sample.labels.http_response_status_code === "404",
+          );
+          expect(sample).toBeDefined();
+          expect(sample!.value).toBeGreaterThan(0);
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "records HTTP GET method",
+        "records GET on HTTP server duration series",
         async () => {
           const response = await fetch(prometheusUrl);
-          expect(await response.text()).toContain('http_method="GET"');
+          const samples = readPrometheusSamples(await response.text(), "http_server_request_duration_count").filter(
+            (sample) => sample.labels.otel_scope_name === HTTP_INSTRUMENTATION_SCOPE,
+          );
+          expect(samples.length).toBeGreaterThan(0);
+          for (const sample of samples) {
+            expect(sample.labels.http_request_method).toBe("GET");
+          }
         },
         TEST_TIMEOUT,
       );
@@ -1136,25 +1279,50 @@ describe("OpenTelemetry Integration", () => {
       );
 
       it(
-        "includes trace_id attribute",
+        "correlates endpoint logs with the exported test trace",
         () => {
-          expect(readLogs()).toContain('"trace_id"');
+          const logs = readTestLogs();
+          expect(logs).toHaveLength(2);
+          expect(readSpans("otel-test")).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ name: "test-span", traceId: otelTestResult.traceId, spanId: otelTestResult.spanId }),
+            ]),
+          );
+          for (const log of logs) {
+            expect(log.traceId).toBe(otelTestResult.traceId);
+          }
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "includes span_id attribute",
+        "links endpoint log span IDs to exported spans in the same trace",
         () => {
-          expect(readLogs()).toContain('"span_id"');
+          const logs = readTestLogs();
+          const spans = readSpans();
+          expect(logs).toHaveLength(2);
+          for (const log of logs) {
+            expect(spans).toEqual(
+              expect.arrayContaining([expect.objectContaining({ traceId: otelTestResult.traceId, spanId: log.spanId })]),
+            );
+          }
         },
         TEST_TIMEOUT,
       );
 
       it(
-        "includes trace_flags attribute",
+        "exports sampled log flags matching the correlated span",
         () => {
-          expect(readLogs()).toContain('"trace_flags"');
+          const logs = readTestLogs();
+          const spans = readSpans();
+          expect(logs).toHaveLength(2);
+          for (const log of logs) {
+            expect(log.flags).toBe(TraceFlags.SAMPLED);
+            const span = spans.find((span) => span.traceId === log.traceId && span.spanId === log.spanId);
+            expect(span).toBeDefined();
+            // OTLP span flags also encode remote-context bits above the W3C trace flags.
+            expect(span!.flags & 0xff).toBe(log.flags);
+          }
         },
         TEST_TIMEOUT,
       );
