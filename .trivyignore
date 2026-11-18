@@ -1,0 +1,8 @@
+# IM-6542, reviewed 2026-11-18 UTC; expires 2026-11-25 (7 days).
+# picomatch: GHSA-fc5q-39xc-vjpf was withdrawn 2026-11-18T15:38:56Z;
+# the Trivy DB built at 2026-11-18T13:03:23Z still reports this advisory.
+# No patched release is listed. Temporary false-positive suppression only;
+# keep all fixable CVEs visible and reassess after the advisory feed catches up.
+# https://github.com/advisories/GHSA-fc5q-39xc-vjpf
+# https://github.com/micromatch/picomatch/pull/235#issuecomment-6315749381
+CVE-2026-112366 exp:2026-11-25
