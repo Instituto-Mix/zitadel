@@ -334,6 +334,17 @@ container run --rm -p 3000:3000 \
 The server listens on port **3000**. Health endpoint: **`/ready`** (or
 `<NEXT_PUBLIC_BASE_PATH>/ready` if a base path was set). A `HEALTHCHECK` is baked in.
 
+### Pull-request CI
+
+`.github/workflows/ci.yml` runs the existing Nx `test` and `build` targets for
+affected projects on GitHub-hosted Ubuntu, then checks for code-generation
+changes. Nx Cloud is disabled for this fork, and the Codecov upload token is
+optional. Keep `lint_test_build.yml` with this entry point during upstream merges.
+
+The upstream `pack`/`release`/`version` workflows are not this fork's release path.
+Pull-request CI does not publish images or deploy; the supported release workflow
+remains `build-login-image.yml`, described below.
+
 ### Entrar release playbook
 
 Use this procedure for an authorized release to Entrar. A push to `main` that
