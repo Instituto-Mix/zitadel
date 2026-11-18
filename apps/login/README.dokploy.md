@@ -140,6 +140,20 @@ authenticated password changes and the separate ERP-verified first-access bridge
 (`completeFirstAccess`) are unchanged. The registered destination for permitted
 resets is masked server-side, not added unmasked to client props or URLs.
 
+After a confirmed password write, `SetPasswordForm` clears the entered code and
+passwords. Automatic sign-in still runs after the existing two-second delay.
+If sign-in then fails, the page acknowledges the changed password separately
+from the sign-in error and retry/support guidance, with a contextual sign-in link.
+The completed form and resend controls are no longer offered in this view; this
+does not prevent reopening or reloading a reset link.
+Failed password writes remain on the reset form; successful verification, MFA,
+redirect and SAML continuations are unchanged. This does not unlock accounts or
+change authentication policy.
+
+The focused regressions use synthetic responses. They do not establish why a
+particular account could not sign in, whether a production reset completed, or
+whether an account is locked or unlocked.
+
 ---
 
 ## Files
