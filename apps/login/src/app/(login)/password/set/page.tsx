@@ -4,6 +4,7 @@ import { SetPasswordForm } from "@/components/set-password-form";
 import { Translated } from "@/components/translated";
 import { UserAvatar } from "@/components/user-avatar";
 import { UNKNOWN_USER_ID } from "@/lib/constants";
+import { resolveLegacyIdentifier, substituteLoginName } from "@/lib/server/legacy-identifier";
 import { maskEmail } from "@/lib/server/mask-email";
 import { usableEmail } from "@/lib/placeholder-email";
 import { getServiceConfig } from "@/lib/server/service-url";
@@ -85,9 +86,15 @@ export default async function Page(props: { searchParams: Promise<Record<string 
     const userResponse = await getUserByID({ serviceConfig, userId });
     user = userResponse.user;
   } else if (loginName) {
+    let lookupLoginName = loginName;
+    if (loginSettings.allowLocalAuthentication) {
+      const resolved = await resolveLegacyIdentifier(loginName);
+      lookupLoginName = substituteLoginName(loginName, resolved);
+    }
+
     const users = await searchUsers({
       serviceConfig,
-      searchValue: loginName,
+      searchValue: lookupLoginName,
       loginSettings: loginSettings,
       organizationId: organization,
     });

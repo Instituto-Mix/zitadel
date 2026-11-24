@@ -135,6 +135,12 @@ redemption, so an existing code cannot bypass this policy. Unknown/nonhuman user
 retain the generic confirmation. This uses the existing usable-email policy,
 not additional email-format validation.
 
+Login-name-only `/password/set` links resolve legacy identifiers server-side before
+user lookup, only when local authentication is allowed, matching reset initiation.
+The original alias stays in browser display and navigation; the canonical name is
+used only for lookup. Unknown-user handling, reset-code validation, and policy
+gates are unchanged.
+
 Initial no-code password setup still has no sent-code alert and remains available;
 authenticated password changes and the separate ERP-verified first-access bridge
 (`completeFirstAccess`) are unchanged. The registered destination for permitted
